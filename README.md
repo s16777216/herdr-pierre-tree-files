@@ -34,14 +34,14 @@ A fast, modern file explorer panel for [Herdr App](https://github.com/herdr-app)
 
 #### Windows (PowerShell)
 ```powershell
-git clone https://github.com/<your-username>/herdr-pierre-tree-files.git
+git clone https://github.com/s16777216/herdr-pierre-tree-files.git
 cd herdr-pierre-tree-files
 .\install.ps1
 ```
 
 #### macOS / Linux (Bash)
 ```bash
-git clone https://github.com/<your-username>/herdr-pierre-tree-files.git
+git clone https://github.com/s16777216/herdr-pierre-tree-files.git
 cd herdr-pierre-tree-files
 ./install.sh
 ```

@@ -89,10 +89,19 @@ export default class CodeEditorPane extends View {
         const normBase = base.replace(/[\\/]+$/, "");
         const targetAbs = `${normBase}${sep}mods${sep}editor${sep}cache${sep}${cacheFile}`;
 
-        if (sep === "\\") {
-          await exec("cmd", ["/c", `copy /y "${this.file}" "${targetAbs}"`]);
+        const isWin = sep === "\\";
+        const srcPath = isWin ? this.file.replace(/\//g, "\\") : this.file;
+        const targetPath = isWin ? targetAbs.replace(/\//g, "\\") : targetAbs;
+
+        let res;
+        if (isWin) {
+          res = await exec("cmd", ["/c", `copy /y "${srcPath}" "${targetPath}"`]);
         } else {
-          await exec("cp", ["-f", this.file, targetAbs]);
+          res = await exec("cp", ["-f", srcPath, targetPath]);
+        }
+
+        if (res && res.code !== 0) {
+          throw new Error(res.stderr?.trim() || res.stdout?.trim() || `複製圖片失敗 (code ${res.code})`);
         }
 
         this.imageAssetPath = relPath;
@@ -247,7 +256,7 @@ export default class CodeEditorPane extends View {
             .when(!this.loading && !this.error && Boolean(this.imageAssetPath), el => el.child(
               div().rounded(8).border_1().border_color(t.border).p(6).bg(t.raised)
                 .child(
-                  image(this.imageAssetPath).max_w_full().max_h_full()
+                  image(this.imageAssetPath)
                 )
             ))
         );

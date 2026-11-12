@@ -179,8 +179,8 @@ export default class CodeEditorPane extends View {
           // Dirty dot
           .child(
             div().size(8).rounded(4)
-              .bg(this.isDirty ? t.ansi3 : "transparent")
-              .tooltip(this.isDirty ? "未儲存變更" : "已是最新版本")
+              .when(this.isDirty, s => s.bg(t.ansi3))
+              .tooltip(this.isDirty ? "未儲存變更" : "")
           )
           // File Name
           .child(div().font_semibold().text_size(13).text_color(t.foreground).child(fileName))
@@ -206,9 +206,9 @@ export default class CodeEditorPane extends View {
           // Save Button
           .child(
             div().id("btn-save").h(24).px(10).gap(4).flex().items_center().justify_center().rounded(6).cursor_pointer()
-              .when(this.isDirty, s => s.bg(t.accent).text_color("#ffffff"))
+              .when(this.isDirty, s => s.bg(t.accent).text_color(t.foreground))
               .when(!this.isDirty, s => s.bg(t.surface).border_1().border_color(t.border).text_color(t.dim))
-              .hover(s => this.isDirty ? s.opacity(0.9) : s.bg(t.hover).text_color(t.foreground))
+              .hover(s => s.bg(t.hover))
               .tooltip("儲存檔案 (⌘S)")
               .on_click((_e, cx) => this.save(cx))
               .child(this.saving ? "儲存中…" : "儲存 (⌘S)")

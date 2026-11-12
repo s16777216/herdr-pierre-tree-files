@@ -22,6 +22,9 @@ A fast, modern file explorer panel for [Herdr App](https://github.com/herdr-app)
 - **🌿 Git Status Integration**:
   - Shows file change indicators: `A` (Added), `M` (Modified), `D` (Deleted), `U` (Untracked).
   - Folder badges indicate the number of modified descendant files inside collapsed trees.
+- **✏️ Built-in Code Editor Split Pane**:
+  - Clicking any file in the tree instantly opens a new editor pane on the right side.
+  - Full syntax highlighting, line numbers, code folding, and `⌘S` / `Ctrl+S` quick atomic save.
 - **📝 Graceful Markdown Integration**:
   - If `markdown-panel` is installed: provides rich block rendering, inline section editing, and popout `↗` (`Ctrl+Shift+M`).
   - If `markdown-panel` is not installed: gracefully degrades to syntax-highlighted code editor preview without errors.

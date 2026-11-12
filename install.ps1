@@ -4,6 +4,8 @@ $ErrorActionPreference = "Stop"
 $herdrHome = "$HOME\.config\herdr-app"
 $targetModDir = Join-Path $herdrHome "mods\pierre-tree-files"
 $sourceModDir = Join-Path $PSScriptRoot "mods\pierre-tree-files"
+$targetEditorDir = Join-Path $herdrHome "mods\editor"
+$sourceEditorDir = Join-Path $PSScriptRoot "mods\editor"
 
 if (-not (Test-Path $sourceModDir)) {
     Write-Error "Source directory not found: $sourceModDir"
@@ -14,8 +16,15 @@ Write-Host "==> Installing pierre-tree-files to $targetModDir ..." -ForegroundCo
 if (-not (Test-Path $targetModDir)) {
     New-Item -ItemType Directory -Force -Path $targetModDir | Out-Null
 }
-
 Copy-Item -Path "$sourceModDir\*" -Destination $targetModDir -Recurse -Force
+
+if (Test-Path $sourceEditorDir) {
+    Write-Host "==> Installing companion editor mod to $targetEditorDir ..." -ForegroundColor Cyan
+    if (-not (Test-Path $targetEditorDir)) {
+        New-Item -ItemType Directory -Force -Path $targetEditorDir | Out-Null
+    }
+    Copy-Item -Path "$sourceEditorDir\*" -Destination $targetEditorDir -Recurse -Force
+}
 
 Write-Host "==> Verifying mod with herdr-app check..." -ForegroundColor Cyan
 try {

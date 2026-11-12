@@ -3,7 +3,7 @@
 // bounded read-only previews, and optional Markdown panel pop-out.
 import { View, div, svg, image } from "gpui-kit";
 import { v_flex, h_flex, Editor, EditorState, InputState, Input } from "gpui-base";
-import { spaces, panes, focused, layout, exec, readTextFile, watchFolder, theme, settings, window, openOverlay, setShared, home } from "herdr";
+import { spaces, panes, focused, layout, exec, readTextFile, watchFolder, theme, settings, window, openOverlay, setShared, home, run } from "herdr";
 import ICONS from "./icons.js";
 import { PierreTreeModel } from "./tree.js";
 import { MarkdownDoc } from "./doc.js";
@@ -394,7 +394,18 @@ export default class Files extends View {
     return h_flex().id(`file-${row.path}`).h(26).flex_none().pl(indent).pr(8).gap(6).items_center().rounded(6).cursor_pointer()
       .when(isSelected, el => el.bg(t.selected))
       .hover(s => s.bg(isSelected ? t.selected : t.hover))
-      .on_click((_e, cx) => isDir ? this.toggleDir(row, cx) : this.show(row.path, cx))
+      .on_click((_e, cx) => {
+        if (isDir) {
+          this.toggleDir(row, cx);
+        } else {
+          const fullPath = this.root ? `${this.root}/${row.path}`.replace(/\\/g, "/") : row.path;
+          run("pane.split", {
+            direction: "right",
+            mod: "editor",
+            props: { file: fullPath, on: this.on }
+          });
+        }
+      })
       .child(isDir ? svg(`${DIR}/chevron-${row.open ? "down" : "right"}.svg`).size(12).flex_none().text_color(t.dim) : div().w(12).flex_none())
       .child(image(icon(row.path, isDir, row.open, dark)).size(15).flex_none())
       .child(div().flex_1().min_w(0).truncate().text_size(12).font_medium()

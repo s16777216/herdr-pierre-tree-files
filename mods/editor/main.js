@@ -203,12 +203,12 @@ export default class CodeEditorPane extends View {
           .child(div().flex_1())
           // Revert button (only visible when dirty)
           .when(this.isDirty, el => el.child(
-            div().id("btn-revert").h(18).px(6).flex().items_center().justify_center().rounded(4).cursor_pointer()
-              .bg(t.surface).border_1().border_color(t.border).text_size(10).text_color(t.muted)
+            div().id("btn-revert").size(20).flex().items_center().justify_center().rounded(4).cursor_pointer()
+              .text_color(t.muted)
               .hover(s => s.bg(t.hover).text_color(t.foreground))
               .tooltip("放棄變更，復原為磁碟檔案")
               .on_click((_e, cx) => this.revert(cx))
-              .child("復原")
+              .child(svg("mods/editor/icons/undo.svg").size(12))
           ))
           // Language Tag
           .child(
@@ -220,15 +220,15 @@ export default class CodeEditorPane extends View {
           .child(
             div().text_size(11).text_color(t.dim).child(`${this.lineCount}L`)
           )
-          // Save Button
+          // Save Button (Pure SVG icon button)
           .child(
-            div().id("btn-save").h(18).px(8).flex().items_center().justify_center().rounded(4).cursor_pointer()
+            div().id("btn-save").size(20).flex().items_center().justify_center().rounded(4).cursor_pointer()
               .when(this.isDirty, s => s.bg(t.accent).text_color(t.foreground))
-              .when(!this.isDirty, s => s.bg(t.surface).border_1().border_color(t.border).text_color(t.dim))
-              .hover(s => s.bg(t.hover))
+              .when(!this.isDirty, s => s.text_color(t.dim))
+              .hover(s => s.bg(t.hover).text_color(t.foreground))
               .tooltip("儲存檔案 (⌘S)")
               .on_click((_e, cx) => this.save(cx))
-              .child(this.saving ? "儲存中…" : "儲存 ⌘S")
+              .child(svg("mods/editor/icons/save.svg").size(12))
           )
       )
       // Editor body or loading/error

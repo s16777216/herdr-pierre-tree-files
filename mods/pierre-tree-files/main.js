@@ -22,11 +22,44 @@ async function checkMarkdownPanel() {
   return hasMarkdownPanel;
 }
 
+const lastCwdBySpace = new Map();
+
 function location() {
   const space = spaces().find(s => s.active), f = focused();
-  const pane = f?.pane ? panes().find(p => p.pane === f.pane) : null;
+  const allPanes = panes() ?? [];
+  const pane = f?.pane ? allPanes.find(p => p.pane === f.pane) : null;
   const on = f?.pane === null ? (f.terminal?.includes("/") ? f.terminal.split("/")[0] : null) : space?.machine ?? null;
-  return { cwd: pane?.cwd || f?.cwd || space?.folder, on };
+
+  // 1. 若當前 focused pane 有明確的 cwd
+  let cwd = pane?.cwd || f?.cwd || null;
+
+  // 2. 若當前是純 mod pane (如 editor tab 沒有 terminal)，從同 space 其它 terminal pane 尋找
+  if (!cwd && space) {
+    const spaceTermPane = allPanes.find(p => p.cwd && (space.tabs ?? []).some(t => t.id === p.tab));
+    if (spaceTermPane?.cwd) {
+      cwd = spaceTermPane.cwd;
+    }
+  }
+
+  // 3. 嘗試使用該 space 先前記住的有效目錄 (避免退化到 ~/.config/herdr-app)
+  if ((!cwd || cwd.includes(".config/herdr-app") || cwd.includes(".config\\herdr-app")) && space?.id) {
+    const remembered = lastCwdBySpace.get(space.id);
+    if (remembered) {
+      cwd = remembered;
+    }
+  }
+
+  // 4. 若以上皆無，才 fallback 到 space.folder
+  if (!cwd) {
+    cwd = space?.folder || null;
+  }
+
+  // 5. 只要是有效的專案目錄，便記住該 space 的工作目錄
+  if (cwd && space?.id && !cwd.includes(".config/herdr-app") && !cwd.includes(".config\\herdr-app")) {
+    lastCwdBySpace.set(space.id, cwd);
+  }
+
+  return { cwd, on };
 }
 const key = () => JSON.stringify(location());
 
@@ -402,6 +435,7 @@ export default class Files extends View {
           const fileName = row.name || row.path.split(/[\\/]/).pop() || "Editor";
           run("tab.new", {
             name: fileName,
+            folder: this.root,
             mod: "editor",
             props: { file: fullPath, on: this.on }
           });

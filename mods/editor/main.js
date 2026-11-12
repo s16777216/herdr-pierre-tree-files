@@ -63,6 +63,10 @@ export default class CodeEditorPane extends View {
     this.lineCount = 0;
     this.isImage = isImageFile(this.file);
     this.imageAssetPath = null;
+    this.isFit = true;
+    this.zoom = 1.0;
+    this.imgWidth = 0;
+    this.imgHeight = 0;
 
     if (this.file) {
       this.loadFile(cx);
@@ -70,6 +74,50 @@ export default class CodeEditorPane extends View {
       this.loading = false;
       this.error = "No file specified";
     }
+  }
+
+  zoomIn(cx) {
+    const steps = [0.25, 0.33, 0.5, 0.67, 0.75, 1.0, 1.25, 1.5, 2.0, 3.0, 4.0];
+    if (this.isFit) {
+      this.isFit = false;
+      this.zoom = 1.0;
+    } else {
+      const next = steps.find(s => s > this.zoom + 0.05);
+      this.zoom = next ?? 4.0;
+    }
+    cx.notify();
+  }
+
+  zoomOut(cx) {
+    const steps = [0.25, 0.33, 0.5, 0.67, 0.75, 1.0, 1.25, 1.5, 2.0, 3.0, 4.0];
+    if (this.isFit) {
+      this.isFit = false;
+      this.zoom = 0.75;
+    } else {
+      const prev = [...steps].reverse().find(s => s < this.zoom - 0.05);
+      if (prev) {
+        this.zoom = prev;
+      } else {
+        this.isFit = true;
+      }
+    }
+    cx.notify();
+  }
+
+  toggleFit(cx) {
+    if (this.isFit) {
+      this.isFit = false;
+      this.zoom = 1.0;
+    } else {
+      this.isFit = true;
+    }
+    cx.notify();
+  }
+
+  resetFit(cx) {
+    this.isFit = true;
+    this.zoom = 1.0;
+    cx.notify();
   }
 
   async loadFile(cx) {
@@ -98,17 +146,23 @@ export default class CodeEditorPane extends View {
           res = await exec("powershell", [
             "-NoProfile",
             "-Command",
-            `if (-not (Test-Path -LiteralPath '${targetPath}')) { Copy-Item -LiteralPath '${srcPath}' -Destination '${targetPath}' -Force }`
+            `if (-not (Test-Path -LiteralPath '${targetPath}')) { Copy-Item -LiteralPath '${srcPath}' -Destination '${targetPath}' -Force }; try { Add-Type -AssemblyName System.Drawing; $i = [System.Drawing.Image]::FromFile('${targetPath}'); Write-Host "SIZE:$($i.Width)x$($i.Height)"; $i.Dispose() } catch {}`
           ]);
         } else {
           res = await exec("sh", [
             "-c",
-            `[ ! -f "${targetPath}" ] && cp -f "${srcPath}" "${targetPath}" || true`
+            `[ ! -f "${targetPath}" ] && cp -f "${srcPath}" "${targetPath}" || true; identify -format "SIZE:%wx%h" "${targetPath}" 2>/dev/null || true`
           ]);
         }
 
         if (res && res.code !== 0) {
           throw new Error(res.stderr?.trim() || res.stdout?.trim() || `快取圖片失敗 (code ${res.code})`);
+        }
+
+        const match = (res.stdout || "").match(/SIZE:(\d+)x(\d+)/);
+        if (match) {
+          this.imgWidth = parseInt(match[1], 10);
+          this.imgHeight = parseInt(match[2], 10);
         }
 
         this.imageAssetPath = relPath;
@@ -235,9 +289,22 @@ export default class CodeEditorPane extends View {
     const lang = getLanguage(this.file);
 
     if (this.isImage) {
+      const zoomLabel = this.isFit ? "Fit" : `${Math.round(this.zoom * 100)}%`;
+      const scaledW = this.imgWidth > 0 && !this.isFit ? Math.round(this.imgWidth * this.zoom) : null;
+      const scaledH = this.imgHeight > 0 && !this.isFit ? Math.round(this.imgHeight * this.zoom) : null;
+
       return v_flex().id("editor-pane").size_full().min_h(0).min_w(0).bg(t.background).text_color(t.foreground)
         .track_focus(this.handle)
-        // Top Breadcrumb Bar (不顯示格式標籤，維持乾淨麵包屑)
+        .on_key_down((e, cx) => {
+          if (e.keystroke === "ctrl-=" || e.keystroke === "ctrl-+" || e.keystroke === "=" || e.keystroke === "+") {
+            this.zoomIn(cx);
+          } else if (e.keystroke === "ctrl--" || e.keystroke === "-") {
+            this.zoomOut(cx);
+          } else if (e.keystroke === "ctrl-0" || e.keystroke === "0") {
+            this.resetFit(cx);
+          }
+        })
+        // Top Breadcrumb Bar (不顯示格式標籤，維持乾淨麵包屑與縮放控制項)
         .child(
           h_flex().h(26).flex_none().px(10).gap(5).items_center().border_b(1).border_color(t.border).bg(t.background)
             .children(parentCrumbs.map(seg => (
@@ -247,23 +314,59 @@ export default class CodeEditorPane extends View {
               ])
             )))
             .child(div().font_semibold().text_size(12).text_color(t.foreground).child(fileName))
+            .when(Boolean(this.imgWidth && this.imgHeight), el => el.child(
+              div().text_size(10).text_color(t.dim).child(`${this.imgWidth}×${this.imgHeight}`)
+            ))
             .child(div().flex_1())
+            // Zoom controls
+            .child(
+              h_flex().gap(2).items_center().children([
+                // Zoom out
+                div().id("btn-zoom-out").size(20).flex().items_center().justify_center().rounded(4).cursor_pointer()
+                  .text_color(t.muted).hover(s => s.bg(t.hover).text_color(t.foreground))
+                  .tooltip("縮小 (-)")
+                  .on_click((_e, cx) => this.zoomOut(cx))
+                  .child(div().font_bold().text_size(14).child("−")),
+                // Zoom level / Fit toggle
+                div().id("btn-zoom-fit").h(20).px(6).flex().items_center().justify_center().rounded(4).cursor_pointer()
+                  .text_color(this.isFit ? t.accent : t.foreground).bg(t.raised)
+                  .hover(s => s.bg(t.hover))
+                  .tooltip(this.isFit ? "點擊切換為 100% 原寸" : "點擊重置為自適應 (Fit / 0)")
+                  .on_click((_e, cx) => this.toggleFit(cx))
+                  .child(div().text_size(11).font_mono().child(zoomLabel)),
+                // Zoom in
+                div().id("btn-zoom-in").size(20).flex().items_center().justify_center().rounded(4).cursor_pointer()
+                  .text_color(t.muted).hover(s => s.bg(t.hover).text_color(t.foreground))
+                  .tooltip("放大 (+)")
+                  .on_click((_e, cx) => this.zoomIn(cx))
+                  .child(div().font_bold().text_size(14).child("+"))
+              ])
+            )
         )
-        // Image display viewport (Scheme A: Fit to window, complete view without clipping)
+        // Image display viewport
         .child(
-          v_flex().id("image-viewport").flex_1().min_h(0).min_w(0)
-            .items_center().justify_center().p(24).overflow_hidden()
+          v_flex().id("image-viewport").flex_1().min_h(0).min_w(0).p(24)
+            .when(this.isFit, el => el.items_center().justify_center().overflow_hidden())
+            .when(!this.isFit, el => el.overflow_scroll())
             .when(this.loading, el => el.child(
-              div().text_size(13).text_color(t.dim).child("正在載入圖片…")
+              div().m_auto().text_size(13).text_color(t.dim).child("正在載入圖片…")
             ))
             .when(Boolean(this.error) && !this.loading, el => el.child(
-              div().text_size(13).text_color(t.ansi1).child(this.error)
+              div().m_auto().text_size(13).text_color(t.ansi1).child(this.error)
             ))
             .when(!this.loading && !this.error && Boolean(this.imageAssetPath), el => el.child(
-              div().max_w_full().max_h_full().flex().items_center().justify_center().rounded(8).border_1().border_color(t.border).p(6).bg(t.raised)
-                .child(
-                  image(this.imageAssetPath).max_w_full().max_h_full()
-                )
+              this.isFit
+                // Fit mode: adapt smoothly within bounds
+                ? div().max_w_full().max_h_full().flex().items_center().justify_center().rounded(8).border_1().border_color(t.border).p(6).bg(t.raised)
+                    .child(
+                      image(this.imageAssetPath).max_w_full().max_h_full()
+                    )
+                // Custom zoom mode: fixed scaled size with full scrolling
+                : div().rounded(8).border_1().border_color(t.border).p(6).bg(t.raised)
+                    .when(Boolean(scaledW && scaledH), b => b.w(scaledW).h(scaledH))
+                    .child(
+                      image(this.imageAssetPath).when(Boolean(scaledW && scaledH), img => img.w(scaledW).h(scaledH))
+                    )
             ))
         );
     }

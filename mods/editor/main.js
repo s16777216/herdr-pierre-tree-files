@@ -1,6 +1,13 @@
-import { View, div, svg } from "gpui-kit";
+import { View, div, svg, image } from "gpui-kit";
 import { v_flex, h_flex, Editor, EditorState } from "gpui-base";
 import { props, readTextFile, writeTextFile, theme, settings, notify } from "herdr";
+
+const IMAGE_EXTS = new Set(["png", "jpg", "jpeg", "gif", "webp", "ico", "bmp", "svg"]);
+function isImageFile(filePath) {
+  if (!filePath) return false;
+  const ext = filePath.split(".").pop().toLowerCase();
+  return IMAGE_EXTS.has(ext);
+}
 
 const LANG_MAP = {
   js: "js", jsx: "js", mjs: "js", cjs: "js",
@@ -54,6 +61,7 @@ export default class CodeEditorPane extends View {
     this.error = null;
     this.saving = false;
     this.lineCount = 0;
+    this.isImage = isImageFile(this.file);
 
     if (this.file) {
       this.loadFile(cx);
@@ -64,6 +72,13 @@ export default class CodeEditorPane extends View {
   }
 
   async loadFile(cx) {
+    if (this.isImage) {
+      this.loading = false;
+      this.error = null;
+      cx.notify();
+      return;
+    }
+
     this.loading = true;
     this.error = null;
     cx.notify();
@@ -175,6 +190,35 @@ export default class CodeEditorPane extends View {
     const fileName = breadcrumbs.length ? breadcrumbs[breadcrumbs.length - 1] : "Untitled";
     const parentCrumbs = breadcrumbs.slice(0, -1);
     const lang = getLanguage(this.file);
+
+    if (this.isImage) {
+      return v_flex().id("editor-pane").size_full().min_h(0).min_w(0).bg(t.background).text_color(t.foreground)
+        .track_focus(this.handle)
+        // Top Breadcrumb Bar (不顯示格式標籤，維持乾淨麵包屑)
+        .child(
+          h_flex().h(26).flex_none().px(10).gap(5).items_center().border_b(1).border_color(t.border).bg(t.background)
+            .children(parentCrumbs.map(seg => (
+              h_flex().gap(5).items_center().children([
+                div().text_size(11).text_color(t.dim).child(seg),
+                div().text_size(10).text_color(t.dim).child("›")
+              ])
+            )))
+            .child(div().font_semibold().text_size(12).text_color(t.foreground).child(fileName))
+            .child(div().flex_1())
+        )
+        // Image display viewport
+        .child(
+          v_flex().id("image-viewport").flex_1().min_h(0).min_w(0)
+            .overflow_scroll()
+            .items_center().justify_center().p(24)
+            .child(
+              div().rounded(8).border_1().border_color(t.border).p(6).bg(t.raised)
+                .child(
+                  image(this.file).max_w_full().max_h_full()
+                )
+            )
+        );
+    }
 
     return v_flex().id("editor-pane").size_full().min_h(0).min_w(0).bg(t.background).text_color(t.foreground)
       .track_focus(this.handle)

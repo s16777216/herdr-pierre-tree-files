@@ -81,13 +81,13 @@ export default class CodeEditorPane extends View {
       try {
         const hash = Math.abs(Array.from(this.file).reduce((acc, char) => (acc << 5) - acc + char.charCodeAt(0), 0)).toString(36);
         const ext = this.file.split(".").pop().toLowerCase();
-        const cacheFile = `cache_${hash}.${ext}`;
-        const relPath = `mods/editor/cache/${cacheFile}`;
+        const cacheFile = `img_${hash}.${ext}`;
+        const relPath = `data/image-cache/${cacheFile}`;
 
         const base = appHome();
         const sep = base.includes("\\") ? "\\" : "/";
         const normBase = base.replace(/[\\/]+$/, "");
-        const targetAbs = `${normBase}${sep}mods${sep}editor${sep}cache${sep}${cacheFile}`;
+        const targetAbs = `${normBase}${sep}data${sep}image-cache${sep}${cacheFile}`;
 
         const isWin = sep === "\\";
         const srcPath = isWin ? this.file.replace(/\//g, "\\") : this.file;
@@ -98,14 +98,17 @@ export default class CodeEditorPane extends View {
           res = await exec("powershell", [
             "-NoProfile",
             "-Command",
-            `Copy-Item -LiteralPath '${srcPath}' -Destination '${targetPath}' -Force`
+            `if (-not (Test-Path -LiteralPath '${targetPath}')) { Copy-Item -LiteralPath '${srcPath}' -Destination '${targetPath}' -Force }`
           ]);
         } else {
-          res = await exec("cp", ["-f", srcPath, targetPath]);
+          res = await exec("sh", [
+            "-c",
+            `[ ! -f "${targetPath}" ] && cp -f "${srcPath}" "${targetPath}" || true`
+          ]);
         }
 
         if (res && res.code !== 0) {
-          throw new Error(res.stderr?.trim() || res.stdout?.trim() || `複製圖片失敗 (code ${res.code})`);
+          throw new Error(res.stderr?.trim() || res.stdout?.trim() || `快取圖片失敗 (code ${res.code})`);
         }
 
         this.imageAssetPath = relPath;

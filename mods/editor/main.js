@@ -333,7 +333,7 @@ export default class CodeEditorPane extends View {
                   .hover(s => s.bg(t.hover))
                   .tooltip(this.isFit ? "點擊切換為 100% 原寸" : "點擊重置為自適應 (Fit / 0)")
                   .on_click((_e, cx) => this.toggleFit(cx))
-                  .child(div().text_size(11).font_mono().child(zoomLabel)),
+                  .child(div().text_size(11).font_medium().child(zoomLabel)),
                 // Zoom in
                 div().id("btn-zoom-in").size(20).flex().items_center().justify_center().rounded(4).cursor_pointer()
                   .text_color(t.muted).hover(s => s.bg(t.hover).text_color(t.foreground))

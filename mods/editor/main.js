@@ -1,6 +1,6 @@
 import { View, div, svg, image } from "gpui-kit";
 import { v_flex, h_flex, Editor, EditorState } from "gpui-base";
-import { props, readTextFile, writeTextFile, theme, settings, notify } from "herdr";
+import { props, readTextFile, writeTextFile, theme, settings, notify, exec, appHome } from "herdr";
 
 const IMAGE_EXTS = new Set(["png", "jpg", "jpeg", "gif", "webp", "ico", "bmp", "svg"]);
 function isImageFile(filePath) {
@@ -62,6 +62,7 @@ export default class CodeEditorPane extends View {
     this.saving = false;
     this.lineCount = 0;
     this.isImage = isImageFile(this.file);
+    this.imageAssetPath = null;
 
     if (this.file) {
       this.loadFile(cx);
@@ -73,9 +74,35 @@ export default class CodeEditorPane extends View {
 
   async loadFile(cx) {
     if (this.isImage) {
-      this.loading = false;
+      this.loading = true;
       this.error = null;
       cx.notify();
+
+      try {
+        const hash = Math.abs(Array.from(this.file).reduce((acc, char) => (acc << 5) - acc + char.charCodeAt(0), 0)).toString(36);
+        const ext = this.file.split(".").pop().toLowerCase();
+        const cacheFile = `cache_${hash}.${ext}`;
+        const relPath = `mods/editor/cache/${cacheFile}`;
+
+        const base = appHome();
+        const sep = base.includes("\\") ? "\\" : "/";
+        const normBase = base.replace(/[\\/]+$/, "");
+        const targetAbs = `${normBase}${sep}mods${sep}editor${sep}cache${sep}${cacheFile}`;
+
+        if (sep === "\\") {
+          await exec("cmd", ["/c", `copy /y "${this.file}" "${targetAbs}"`]);
+        } else {
+          await exec("cp", ["-f", this.file, targetAbs]);
+        }
+
+        this.imageAssetPath = relPath;
+        this.loading = false;
+      } catch (err) {
+        this.error = `載入圖片失敗: ${err?.message || err}`;
+        this.loading = false;
+      } finally {
+        cx.notify();
+      }
       return;
     }
 
@@ -211,12 +238,18 @@ export default class CodeEditorPane extends View {
           v_flex().id("image-viewport").flex_1().min_h(0).min_w(0)
             .overflow_scroll()
             .items_center().justify_center().p(24)
-            .child(
+            .when(this.loading, el => el.child(
+              div().text_size(13).text_color(t.dim).child("正在載入圖片…")
+            ))
+            .when(Boolean(this.error) && !this.loading, el => el.child(
+              div().text_size(13).text_color(t.ansi1).child(this.error)
+            ))
+            .when(!this.loading && !this.error && Boolean(this.imageAssetPath), el => el.child(
               div().rounded(8).border_1().border_color(t.border).p(6).bg(t.raised)
                 .child(
-                  image(this.file).max_w_full().max_h_full()
+                  image(this.imageAssetPath).max_w_full().max_h_full()
                 )
-            )
+            ))
         );
     }
 

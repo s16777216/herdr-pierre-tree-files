@@ -32,6 +32,15 @@ function getLanguage(filePath) {
   return LANG_MAP[ext] ?? ext ?? "text";
 }
 
+function getBreadcrumbs(filePath) {
+  if (!filePath) return [];
+  const norm = filePath.replace(/\\/g, "/");
+  const parts = norm.split("/").filter(Boolean);
+  if (!parts.length) return [];
+  const clean = parts[0].includes(":") ? parts.slice(1) : parts;
+  return clean.slice(-3);
+}
+
 export default class CodeEditorPane extends View {
   init(_props, cx) {
     this.handle = cx.focus_handle();
@@ -162,8 +171,9 @@ export default class CodeEditorPane extends View {
 
   render(cx) {
     const t = theme();
-    const fileName = this.file ? this.file.split(/[\\/]/).pop() : "Untitled";
-    const dirName = this.file ? this.file.replace(/[\\/][^\\/]*$/, "") : "";
+    const breadcrumbs = getBreadcrumbs(this.file);
+    const fileName = breadcrumbs.length ? breadcrumbs[breadcrumbs.length - 1] : "Untitled";
+    const parentCrumbs = breadcrumbs.slice(0, -1);
     const lang = getLanguage(this.file);
 
     return v_flex().id("editor-pane").size_full().min_h(0).min_w(0).bg(t.background).text_color(t.foreground)
@@ -173,45 +183,52 @@ export default class CodeEditorPane extends View {
           this.save(cx);
         }
       })
-      // Top Editor Bar
+      // Top Breadcrumb Bar (Scheme 1: VS Code Breadcrumb style, h=26)
       .child(
-        h_flex().h(36).flex_none().px(12).gap(8).items_center().border_b(1).border_color(t.border).bg(t.raised)
-          // Dirty dot
-          .child(
-            div().size(8).rounded(4)
-              .when(this.isDirty, s => s.bg(t.ansi3))
-              .tooltip(this.isDirty ? "未儲存變更" : "")
-          )
-          // File Name
-          .child(div().font_semibold().text_size(13).text_color(t.foreground).child(fileName))
-          // Directory path
-          .child(div().flex_1().min_w(0).truncate().text_size(11).text_color(t.dim).child(dirName))
-          // Language Tag
-          .child(
-            div().px(6).py(1).rounded(4).bg(t.surface).border_1().border_color(t.border).text_size(10).font_medium().text_color(t.dim).child(lang.toUpperCase())
-          )
-          // Line count
-          .child(
-            div().text_size(11).text_color(t.dim).child(`${this.lineCount} lines`)
-          )
+        h_flex().h(26).flex_none().px(10).gap(5).items_center().border_b(1).border_color(t.border).bg(t.background)
+          // Breadcrumbs (parent segments)
+          .children(parentCrumbs.map(seg => (
+            h_flex().gap(5).items_center().children([
+              div().text_size(11).text_color(t.dim).child(seg),
+              div().text_size(10).text_color(t.dim).child("›")
+            ])
+          )))
+          // Current file name
+          .child(div().font_semibold().text_size(12).text_color(t.foreground).child(fileName))
+          // Dirty indicator dot
+          .when(this.isDirty, el => el.child(
+            div().size(6).rounded(3).bg(t.ansi3).tooltip("未儲存變更")
+          ))
+          // Spacer
+          .child(div().flex_1())
           // Revert button (only visible when dirty)
           .when(this.isDirty, el => el.child(
-            div().id("btn-revert").h(24).px(8).flex().items_center().justify_center().rounded(6).cursor_pointer()
-              .bg(t.surface).border_1().border_color(t.border).text_size(11).text_color(t.muted)
+            div().id("btn-revert").h(18).px(6).flex().items_center().justify_center().rounded(4).cursor_pointer()
+              .bg(t.surface).border_1().border_color(t.border).text_size(10).text_color(t.muted)
               .hover(s => s.bg(t.hover).text_color(t.foreground))
               .tooltip("放棄變更，復原為磁碟檔案")
               .on_click((_e, cx) => this.revert(cx))
               .child("復原")
           ))
+          // Language Tag
+          .child(
+            div().h(16).px(4).flex().items_center().justify_center().rounded(3)
+              .bg(t.surface).border_1().border_color(t.border).text_size(9).font_medium().text_color(t.dim)
+              .child(lang.toUpperCase())
+          )
+          // Line count
+          .child(
+            div().text_size(11).text_color(t.dim).child(`${this.lineCount}L`)
+          )
           // Save Button
           .child(
-            div().id("btn-save").h(24).px(10).gap(4).flex().items_center().justify_center().rounded(6).cursor_pointer()
+            div().id("btn-save").h(18).px(8).flex().items_center().justify_center().rounded(4).cursor_pointer()
               .when(this.isDirty, s => s.bg(t.accent).text_color(t.foreground))
               .when(!this.isDirty, s => s.bg(t.surface).border_1().border_color(t.border).text_color(t.dim))
               .hover(s => s.bg(t.hover))
               .tooltip("儲存檔案 (⌘S)")
               .on_click((_e, cx) => this.save(cx))
-              .child(this.saving ? "儲存中…" : "儲存 (⌘S)")
+              .child(this.saving ? "儲存中…" : "儲存 ⌘S")
           )
       )
       // Editor body or loading/error

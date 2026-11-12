@@ -210,23 +210,12 @@ export default class CodeEditorPane extends View {
               .on_click((_e, cx) => this.revert(cx))
               .child(svg("mods/editor/icons/undo.svg").size(12))
           ))
-          // Language Tag
-          .child(
-            div().h(16).px(4).flex().items_center().justify_center().rounded(3)
-              .bg(t.surface).border_1().border_color(t.border).text_size(9).font_medium().text_color(t.dim)
-              .child(lang.toUpperCase())
-          )
-          // Line count
-          .child(
-            div().text_size(11).text_color(t.dim).child(`${this.lineCount}L`)
-          )
-          // Save Button (Pure SVG icon button)
+          // Save Button (Pure SVG icon button, no background highlight)
           .child(
             div().id("btn-save").size(20).flex().items_center().justify_center().rounded(4).cursor_pointer()
-              .when(this.isDirty, s => s.bg(t.accent).text_color(t.foreground))
-              .when(!this.isDirty, s => s.text_color(t.dim))
+              .text_color(this.isDirty ? t.foreground : t.dim)
               .hover(s => s.bg(t.hover).text_color(t.foreground))
-              .tooltip("儲存檔案 (⌘S)")
+              .tooltip(this.isDirty ? "儲存檔案 (⌘S)" : "已是最新版本")
               .on_click((_e, cx) => this.save(cx))
               .child(svg("mods/editor/icons/save.svg").size(12))
           )

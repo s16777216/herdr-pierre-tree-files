@@ -95,7 +95,11 @@ export default class CodeEditorPane extends View {
 
         let res;
         if (isWin) {
-          res = await exec("cmd", ["/c", `copy /y "${srcPath}" "${targetPath}"`]);
+          res = await exec("powershell", [
+            "-NoProfile",
+            "-Command",
+            `Copy-Item -LiteralPath '${srcPath}' -Destination '${targetPath}' -Force`
+          ]);
         } else {
           res = await exec("cp", ["-f", srcPath, targetPath]);
         }

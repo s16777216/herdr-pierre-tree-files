@@ -1,26 +1,10 @@
 // Herdr's Files panel powered by Pierre-style Path-First tree architecture
-// with VS Code's Material Icon Theme icons, compact folder nesting, instant filter search,
-// bounded read-only previews, and optional Markdown panel pop-out.
+// with VS Code's Material Icon Theme icons, compact folder nesting, and instant filter search.
 import { View, div, svg, image } from "gpui-kit";
 import { v_flex, h_flex, Editor, EditorState, InputState, Input } from "gpui-base";
-import { spaces, panes, focused, layout, exec, readTextFile, watchFolder, theme, settings, window, openOverlay, setShared, home, run } from "herdr";
+import { spaces, panes, focused, layout, exec, readTextFile, watchFolder, theme, settings, window, run } from "herdr";
 import ICONS from "./icons.js";
 import { PierreTreeModel } from "./tree.js";
-import { MarkdownDoc } from "./doc.js";
-
-let hasMarkdownPanel = undefined;
-
-async function checkMarkdownPanel() {
-  if (hasMarkdownPanel !== undefined) return hasMarkdownPanel;
-  try {
-    const p = (home() ?? "").replace(/\\/g, "/") + "/.config/herdr-app/mods/markdown-panel/mod.json";
-    const text = await readTextFile(p);
-    hasMarkdownPanel = Boolean(text);
-  } catch {
-    hasMarkdownPanel = false;
-  }
-  return hasMarkdownPanel;
-}
 
 const lastCwdBySpace = new Map();
 
@@ -87,7 +71,6 @@ function isFilesVisible() {
 const LANG = { ts: "js", tsx: "js", mts: "js", cts: "js", jsx: "js", mjs: "js", toml: "yaml", jsonc: "json", svelte: "html", vue: "html", md: "markdown", markdown: "markdown", mdx: "markdown" };
 const DIR = "mods/pierre-tree-files";
 const ICON = (name) => `mods/workspace-chrome/${name}.svg`;
-const isMarkdown = path => /\.(md|markdown|mdx)$/i.test(path ?? "");
 
 // Material Icon Theme's rules, as VS Code applies them
 const bare = name => name.replace(/^__(.+)__$/, "$1").replace(/^[._-]/, "");
@@ -142,7 +125,6 @@ export default class Files extends View {
     this.marks = {};
     this.gitTopCache = new Map();
     this.stale = false;
-    this.mdDoc = null;
     this.treeModel = new PierreTreeModel();
     this.searching = false;
     this.searchInput = InputState.new({ placeholder: "Filter files… (Esc to close)" });
@@ -159,7 +141,6 @@ export default class Files extends View {
   close() {
     this.watched = null;
     this.code?.release(); this.code = null;
-    this.mdDoc?.release(); this.mdDoc = null;
   }
 
   watch(root, cx) {
@@ -171,7 +152,6 @@ export default class Files extends View {
           await watchFolder(root);
           if (this.watched === root) {
             if (isFilesVisible()) {
-              this.mdDoc?.load(cx);
               this.refresh(cx, true);
             } else {
               this.stale = true;
@@ -322,48 +302,12 @@ export default class Files extends View {
   }
 
   show(path, cx) {
-    const prevDoc = this.mdDoc;
     this.code?.release(); this.code = null;
-    this.mdDoc = null;
     this.file = path; this.fileError = null;
-
-    if (prevDoc) {
-      if (cx) cx.spawn(async () => { await prevDoc.flush().catch(() => {}); prevDoc.release(); });
-      else prevDoc.release();
-    }
     if (!path || !cx) return;
 
-    const context = this.context, root = this.root, on = this.on;
+    const context = this.context, root = this.root;
     const fullPath = `${root}/${path}`;
-
-    if (isMarkdown(path)) {
-      setShared("markdown-panel.target", { path: fullPath, on, seq: Date.now() });
-      cx.spawn(async (cx) => {
-        try {
-          const isInstalled = await checkMarkdownPanel();
-          if (this.file !== path || key() !== context) return;
-          if (isInstalled) {
-            this.mdDoc = new MarkdownDoc(fullPath, on, to => {
-              if (!isMarkdown(to)) return;
-              const normRoot = (root ?? "").replace(/\\/g, "/");
-              const normTo = to.replace(/\\/g, "/");
-              const rel = normTo.startsWith(normRoot + "/") ? normTo.slice(normRoot.length + 1) : to;
-              this.show(rel, cx);
-            }, "mods/markdown-panel/icons");
-            this.mdDoc.load(cx);
-            cx.notify();
-            return;
-          }
-          await this.loadAsPlainText(fullPath, path, context, cx);
-        } catch {
-          if (this.file === path && key() === context) {
-            await this.loadAsPlainText(fullPath, path, context, cx);
-          }
-        }
-      });
-      return;
-    }
-
     cx.spawn(async (cx) => {
       await this.loadAsPlainText(fullPath, path, context, cx);
     });
@@ -377,7 +321,7 @@ export default class Files extends View {
       if (text.includes("\0")) { this.fileError = "Binary file · no text preview"; return; }
       const t = theme(), ext = path.includes(".") ? path.split(".").pop().toLowerCase() : "txt";
       this.code = EditorState.new({
-        language: LANG[ext] ?? (isMarkdown(path) ? "markdown" : ext),
+        language: LANG[ext] ?? ext,
         readonly: true,
         value: text.length > 400000 ? text.slice(0, 400000) + "\n… (file truncated)" : text,
         font_family: settings().font_family,
@@ -388,34 +332,6 @@ export default class Files extends View {
       if (this.file === path && key() === context) this.fileError = "Cannot preview this file (binary, too large, or unreadable)";
     } finally {
       cx.notify();
-    }
-  }
-
-  popOutMarkdown(cx) {
-    if (!this.file || !isMarkdown(this.file)) return;
-    const fullPath = `${this.root}/${this.file}`;
-    setShared("markdown-panel.target", { path: fullPath, on: this.on, seq: Date.now() });
-    const open = () => {
-      try {
-        openOverlay({
-          mod: "markdown-panel",
-          kind: "window",
-          width: 560,
-          height: 0.9,
-          key: "markdown-panel",
-          props: { file: fullPath, on: this.on },
-        });
-      } catch {
-        // Gracefully ignore if markdown-panel is not installed
-      }
-    };
-    if (this.mdDoc) {
-      cx.spawn(async () => {
-        await this.mdDoc?.flush().catch(() => {});
-        open();
-      });
-    } else {
-      open();
     }
   }
 
@@ -457,7 +373,7 @@ export default class Files extends View {
 
   render(cx) {
     if (key() !== this.context || (this.stale && isFilesVisible())) this.refresh(cx, true);
-    const t = theme(), dark = Boolean(settings().dark), md = this.mdDoc;
+    const t = theme(), dark = Boolean(settings().dark);
     const treeProject = !this.file ? this.treeModel.project(this.marks, this.root) : null;
 
     const iconBtn = (id, glyph, tip, on, action) => div().id(id).size(26).flex_none().flex().items_center().justify_center().rounded(6).cursor_pointer()
@@ -472,19 +388,12 @@ export default class Files extends View {
     return v_flex().id("files").key_context("Files").track_focus(this.handle)
       .on_action("files_escape", (_e, cx) => {
         if (this.searching) { this.closeSearch(cx); }
-        else if (md && md.active !== null) { md.close(); cx.notify(); }
         else if (this.file) { this.show(null, cx); cx.notify(); }
       })
       .on_key_down((e, cx) => {
         if ((e.keystroke === "ctrl-f" || e.keystroke === "cmd-f") && !this.file) {
           this.toggleSearch(cx);
-          return;
         }
-        if ((e.keystroke === "ctrl-shift-m" || e.keystroke === "cmd-shift-m") && this.file && isMarkdown(this.file)) {
-          this.popOutMarkdown(cx);
-          return;
-        }
-        md?.key(e, cx);
       })
       .size_full().min_h(0).rounded(10).overflow_hidden().bg(t.background).border_1().border_color(t.border).text_color(t.foreground).text_size(13)
       // Header
@@ -509,22 +418,7 @@ export default class Files extends View {
             this.refresh(cx, true);
           })
         ]))
-        // Markdown controls if markdown-panel is active
-        .children(md ? md.controls(t, "files-md") : [])
-        .when(Boolean(md) && !md.editing, el => el.child(
-          div().id("files-md-refresh").p(4).rounded(6).cursor_pointer().text_color(t.muted).tooltip("Read again")
-            .hover(s => s.bg(t.hover).text_color(t.foreground))
-            .on_click((_e, cx) => md.load(cx))
-            .child(svg("mods/markdown-panel/icons/refresh.svg").size(13)),
-        ))
-        // Pop-out Markdown overlay if markdown file is open
-        .when(Boolean(this.file) && isMarkdown(this.file), el => el.child(
-          div().id("files-md-popout").h(24).px(7).flex().items_center().rounded(6).border_1().border_color(t.border).bg(t.raised).cursor_pointer().text_size(12).text_color(t.foreground)
-            .tooltip("Open in floating Markdown window (Ctrl+Shift+M)")
-            .hover(s => s.bg(t.hover))
-            .on_click((_e, cx) => this.popOutMarkdown(cx))
-            .child("↗")
-        )))
+      )
       // Instant search input bar
       .when(!this.file && this.searching, el => {
         const matchCount = treeProject?.matchCount ?? 0;
@@ -561,8 +455,7 @@ export default class Files extends View {
         );
       })
       // Preview view
-      .when(Boolean(this.file) && Boolean(md), el => el.child(md.body(t, "files-md-doc")))
-      .when(Boolean(this.file) && !md, el => el.child(
+      .when(Boolean(this.file), el => el.child(
         this.code ? Editor.new(this.code).flex_1().min_h(0) : div().p(12).text_color(t.dim).child(this.fileError || "Loading file…")
       ));
   }

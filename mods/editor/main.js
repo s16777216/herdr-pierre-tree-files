@@ -249,11 +249,10 @@ export default class CodeEditorPane extends View {
             .child(div().font_semibold().text_size(12).text_color(t.foreground).child(fileName))
             .child(div().flex_1())
         )
-        // Image display viewport
+        // Image display viewport (Scheme A: Fit to window, complete view without clipping)
         .child(
           v_flex().id("image-viewport").flex_1().min_h(0).min_w(0)
-            .overflow_scroll()
-            .items_center().justify_center().p(24)
+            .items_center().justify_center().p(24).overflow_hidden()
             .when(this.loading, el => el.child(
               div().text_size(13).text_color(t.dim).child("正在載入圖片…")
             ))
@@ -261,9 +260,9 @@ export default class CodeEditorPane extends View {
               div().text_size(13).text_color(t.ansi1).child(this.error)
             ))
             .when(!this.loading && !this.error && Boolean(this.imageAssetPath), el => el.child(
-              div().rounded(8).border_1().border_color(t.border).p(6).bg(t.raised)
+              div().max_w_full().max_h_full().flex().items_center().justify_center().rounded(8).border_1().border_color(t.border).p(6).bg(t.raised)
                 .child(
-                  image(this.imageAssetPath)
+                  image(this.imageAssetPath).max_w_full().max_h_full()
                 )
             ))
         );

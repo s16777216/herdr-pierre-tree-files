@@ -399,8 +399,9 @@ export default class Files extends View {
           this.toggleDir(row, cx);
         } else {
           const fullPath = this.root ? `${this.root}/${row.path}`.replace(/\\/g, "/") : row.path;
-          run("pane.split", {
-            direction: "right",
+          const fileName = row.name || row.path.split(/[\\/]/).pop() || "Editor";
+          run("tab.new", {
+            name: fileName,
             mod: "editor",
             props: { file: fullPath, on: this.on }
           });

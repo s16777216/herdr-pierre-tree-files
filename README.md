@@ -22,42 +22,32 @@ A fast, modern file explorer panel for [Herdr App](https://github.com/herdr-app)
 - **🌿 Git Status Integration**:
   - Shows file change indicators: `A` (Added), `M` (Modified), `D` (Deleted), `U` (Untracked).
   - Folder badges indicate the number of modified descendant files inside collapsed trees.
-- **✏️ Built-in Code Editor Split Pane**:
-  - Clicking any file in the tree instantly opens a new editor pane on the right side.
+- **✏️ Built-in Code Editor & Tab Integration**:
+  - Clicking any file opens a standalone editor tab with breadcrumbs navigation.
   - Full syntax highlighting, line numbers, code folding, and `⌘S` / `Ctrl+S` quick atomic save.
-- **📝 Graceful Markdown Integration**:
-  - If `markdown-panel` is installed: provides rich block rendering, inline section editing, and popout `↗` (`Ctrl+Shift+M`).
-  - If `markdown-panel` is not installed: gracefully degrades to syntax-highlighted code editor preview without errors.
+- **🖼️ Built-in Image Viewer**:
+  - Instant image preview for `.png`, `.jpg`, `.jpeg`, `.gif`, `.webp`, `.ico`, `.bmp`, `.svg`.
+  - Supports zoom in/out (`+`/`-`), fit-to-window toggle (`0`), and natural dimension badge.
 
 ---
 
 ## 🚀 Installation
 
-### Option 1: One-Click Script
+Ask your Herdr coding agent:
+> *"Install the mod from github.com/s16777216/herdr-pierre-tree-files"*
 
-#### Windows (PowerShell)
-```powershell
-git clone https://github.com/s16777216/herdr-pierre-tree-files.git
-cd herdr-pierre-tree-files
-.\install.ps1
-```
+Your agent will automatically copy the `mods/` directory into your `~/.config/herdr-app/mods/` and verify the setup.
 
-#### macOS / Linux (Bash)
-```bash
-git clone https://github.com/s16777216/herdr-pierre-tree-files.git
-cd herdr-pierre-tree-files
-./install.sh
-```
+### Manual Installation
 
-### Option 2: Manual Installation
+Copy both mods from the `mods/` directory into your Herdr configuration folder:
+- **Windows**: `%USERPROFILE%\.config\herdr-app\mods\`
+- **macOS / Linux**: `~/.config/herdr-app/mods/`
 
-Copy the `mods/pierre-tree-files` directory into your Herdr configuration folder:
-- **Windows**: `%USERPROFILE%\.config\herdr-app\mods\pierre-tree-files`
-- **macOS / Linux**: `~/.config/herdr-app/mods/pierre-tree-files`
-
-Then verify the mod:
+Then verify with:
 ```bash
 herdr-app check ~/.config/herdr-app/mods/pierre-tree-files
+herdr-app check ~/.config/herdr-app/mods/editor
 ```
 
 ---
@@ -85,8 +75,9 @@ Herdr will hot-reload within a second!
 | Shortcut | Description |
 |---|---|
 | `Ctrl+F` / `Cmd+F` | Open instant search filter and focus input |
-| `Esc` | Close search / Exit block edit / Return from file preview to tree |
-| `Ctrl+Shift+M` / `Cmd+Shift+M` | Open current Markdown file in floating window |
+| `Esc` | Close search filter |
+| `+` / `-` | Zoom in / Zoom out image in image viewer |
+| `0` | Reset image view to Fit-to-Window |
 
 ---
 

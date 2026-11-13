@@ -68,6 +68,11 @@ export default class CodeEditorPane extends View {
     this.imgWidth = 0;
     this.imgHeight = 0;
 
+    cx.bind_keys([
+      { keystroke: "ctrl-s", action: "code_editor_save", context: "CodeEditor" },
+      { keystroke: "cmd-s", action: "code_editor_save", context: "CodeEditor" }
+    ]);
+
     if (this.file) {
       this.loadFile(cx);
     } else {
@@ -371,12 +376,10 @@ export default class CodeEditorPane extends View {
         );
     }
 
-    return v_flex().id("editor-pane").size_full().min_h(0).min_w(0).bg(t.background).text_color(t.foreground)
+    return v_flex().id("editor-pane").key_context("CodeEditor").size_full().min_h(0).min_w(0).bg(t.background).text_color(t.foreground)
       .track_focus(this.handle)
-      .on_key_down((e, cx) => {
-        if (e.keystroke === "ctrl-s" || e.keystroke === "cmd-s") {
-          this.save(cx);
-        }
+      .on_action("code_editor_save", (_e, cx) => {
+        this.save(cx);
       })
       // Top Breadcrumb Bar (Scheme 1: VS Code Breadcrumb style, h=26)
       .child(

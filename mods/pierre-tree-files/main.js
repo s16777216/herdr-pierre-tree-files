@@ -361,7 +361,7 @@ export default class Files extends View {
       .child(
         isDir
           ? (isPending
-              ? svg(ICON("spinner")).size(12).flex_none().text_color(t.accent ?? t.dim)
+              ? svg(ICON("spinner")).size(12).flex_none().text_color(t.accent ?? t.dim).spin(900)
               : svg(`${DIR}/chevron-${row.open ? "down" : "right"}.svg`).size(12).flex_none().text_color(t.dim))
           : div().w(12).flex_none()
       )
@@ -455,7 +455,7 @@ export default class Files extends View {
               if (r.type === "dir" && r.open && this.pending.has(r.path)) {
                 const loadingIndent = 6 + (r.depth + 1) * 14 + 18;
                 const loadingRow = h_flex().id(`loading-${r.path}`).h(24).flex_none().pl(loadingIndent).pr(8).gap(6).items_center()
-                  .child(svg(ICON("spinner")).size(11).flex_none().text_color(t.dim))
+                  .child(svg(ICON("spinner")).size(11).flex_none().text_color(t.dim).spin(900))
                   .child(div().text_size(11.5).text_color(t.dim).child("Loading…"));
                 return [rowEl, loadingRow];
               }

@@ -1,6 +1,6 @@
 import { View, div, svg, image } from "gpui-kit";
-import { v_flex, h_flex, Editor, EditorState } from "gpui-base";
-import { props, readTextFile, writeTextFile, theme, settings, notify, exec, appHome } from "herdr";
+import { v_flex, h_flex, Editor, EditorState, TextView } from "gpui-base";
+import { props, readTextFile, writeTextFile, theme, settings, notify, exec, appHome, run } from "herdr";
 
 const IMAGE_EXTS = new Set(["png", "jpg", "jpeg", "gif", "webp", "ico", "bmp", "svg"]);
 function isImageFile(filePath) {
@@ -9,32 +9,79 @@ function isImageFile(filePath) {
   return IMAGE_EXTS.has(ext);
 }
 
+const MD_EXTS = new Set(["md", "markdown", "mdx"]);
+function isMarkdownFile(filePath) {
+  if (!filePath) return false;
+  const ext = filePath.split(".").pop().toLowerCase();
+  return MD_EXTS.has(ext);
+}
+
+function formatMarkdownFrontMatter(text) {
+  if (!text) return "";
+  const m = /^-{3}\r?\n([\s\S]*?)\r?\n-{3}[ \t]*(\r?\n|$)/.exec(text);
+  return m ? "```yaml\n" + m[1] + "\n```\n\n" + text.slice(m[0].length) : text;
+}
+
+function resolveMarkdownLink(url, docPath) {
+  if (!url) return null;
+  if (/^(https?:|mailto:)/i.test(url)) return { web: url };
+  if (/^[a-z][a-z0-9+.-]*:/i.test(url) && !/^file:/i.test(url) && !/^[a-z]:[\\/]/i.test(url)) return null;
+  const given = decodeURIComponent(url.replace(/^file:\/\//i, "").replace(/[?#].*$/, "")).replace(/\\/g, "/");
+  if (!given) return null;
+  const normDoc = (docPath ?? "").replace(/\\/g, "/");
+  const isAbs = given.startsWith("/") || /^[A-Za-z]:\//.test(given);
+  const joined = isAbs ? given : normDoc.replace(/\/[^/]*$/, "") + "/" + given;
+  const drive = /^[A-Za-z]:/.exec(joined)?.[0] ?? "";
+  const rest = drive ? joined.slice(drive.length) : joined;
+  const out = rest.split("/").reduce((parts, part) => (
+    part === ".." ? parts.slice(0, -1) : part && part !== "." ? [...parts, part] : parts
+  ), []);
+  return { file: (drive || "") + "/" + out.join("/") };
+}
+
 const LANG_MAP = {
   js: "js", jsx: "js", mjs: "js", cjs: "js",
   ts: "ts", tsx: "ts", mts: "ts", cts: "ts",
-  json: "json", jsonc: "json",
-  html: "html", htm: "html", vue: "html", svelte: "html",
-  css: "css", scss: "css", less: "css",
+  json: "json", jsonc: "json", json5: "json",
+  html: "html", htm: "html", vue: "html", svelte: "html", astro: "html",
+  xml: "xml", xhtml: "xml", plist: "xml", xaml: "xml",
+  css: "css", scss: "css", sass: "css", less: "css",
   md: "markdown", markdown: "markdown", mdx: "markdown",
-  py: "python", pyw: "python",
+  py: "python", pyw: "python", pyi: "python",
   rs: "rust",
   go: "go",
-  c: "c", h: "c", cpp: "cpp", hpp: "cpp", cc: "cpp",
-  sh: "sh", bash: "sh", zsh: "sh", ps1: "sh",
+  c: "c", h: "c",
+  cpp: "cpp", hpp: "cpp", cc: "cpp", cxx: "cpp", hh: "cpp",
+  cs: "csharp",
+  java: "java",
+  kt: "kotlin", kts: "kotlin",
+  swift: "swift",
+  dart: "dart",
+  zig: "zig",
+  lua: "lua",
+  r: "r",
+  pl: "perl", pm: "perl",
+  ex: "elixir", exs: "elixir",
+  sh: "sh", bash: "sh", zsh: "sh", fish: "sh", ps1: "sh", psm1: "sh", psd1: "sh", bat: "sh", cmd: "sh",
   yaml: "yaml", yml: "yaml",
   toml: "toml",
+  ini: "ini", cfg: "ini", conf: "ini", properties: "ini",
   sql: "sql",
+  graphql: "graphql", gql: "graphql",
+  proto: "proto",
+  diff: "diff", patch: "diff",
   php: "php",
-  java: "java",
-  rb: "ruby"
+  rb: "ruby", rake: "ruby", gemspec: "ruby"
 };
 
 function getLanguage(filePath) {
   if (!filePath) return "text";
   const name = filePath.split(/[\\/]/).pop() || "";
-  if (name.startsWith(".env") || name.startsWith(".git") || name.endsWith("rc")) return "sh";
-  if (name === "Dockerfile") return "sh";
-  if (name === "Makefile") return "sh";
+  const lower = name.toLowerCase();
+  if (lower === ".editorconfig") return "ini";
+  if (lower.startsWith(".env") || lower.startsWith(".git") || lower.endsWith("rc")) return "sh";
+  if (lower === "dockerfile" || lower.endsWith(".dockerfile")) return "sh";
+  if (lower === "makefile" || lower === "gnumakefile") return "sh";
   const ext = name.includes(".") ? name.split(".").pop().toLowerCase() : "";
   return LANG_MAP[ext] ?? ext ?? "text";
 }
@@ -62,6 +109,8 @@ export default class CodeEditorPane extends View {
     this.saving = false;
     this.lineCount = 0;
     this.isImage = isImageFile(this.file);
+    this.isMarkdown = isMarkdownFile(this.file);
+    this.mdPreview = this.isMarkdown;
     this.imageAssetPath = null;
     this.isFit = true;
     this.zoom = 1.0;
@@ -123,6 +172,26 @@ export default class CodeEditorPane extends View {
     this.isFit = true;
     this.zoom = 1.0;
     cx.notify();
+  }
+
+  setMarkdownPreview(preview, cx) {
+    if (this.mdPreview === preview) return;
+    this.mdPreview = preview;
+    cx.notify();
+  }
+
+  followLink(url, cx) {
+    const to = resolveMarkdownLink(url, this.file);
+    if (to?.web) {
+      try { cx.open_url(to.web); } catch {}
+    } else if (to?.file) {
+      const targetName = to.file.split(/[\\/]/).pop() || "Editor";
+      run("tab.new", {
+        name: targetName,
+        mod: "pierre-tree-files-editor",
+        props: { file: to.file, on: this.on }
+      });
+    }
   }
 
   async loadFile(cx) {
@@ -399,6 +468,23 @@ export default class CodeEditorPane extends View {
           ))
           // Spacer
           .child(div().flex_1())
+          // Markdown Preview / Source 兩段切換
+          .when(this.isMarkdown, el => el.child(
+            h_flex().p(2).gap(2).rounded(5).bg(t.raised).border_1().border_color(t.border).items_center().children([
+              div().id("btn-md-preview").h(18).px(7).flex().items_center().rounded(3).cursor_pointer()
+                .text_size(11).font_medium()
+                .when(this.mdPreview, b => b.bg(t.background).text_color(t.foreground))
+                .when(!this.mdPreview, b => b.text_color(t.dim).hover(s => s.text_color(t.foreground)))
+                .on_click((_e, cx) => this.setMarkdownPreview(true, cx))
+                .child("Preview"),
+              div().id("btn-md-source").h(18).px(7).flex().items_center().rounded(3).cursor_pointer()
+                .text_size(11).font_medium()
+                .when(!this.mdPreview, b => b.bg(t.background).text_color(t.foreground))
+                .when(this.mdPreview, b => b.text_color(t.dim).hover(s => s.text_color(t.foreground)))
+                .on_click((_e, cx) => this.setMarkdownPreview(false, cx))
+                .child("Source")
+            ])
+          ))
           // Revert button (only visible when dirty)
           .when(this.isDirty, el => el.child(
             div().id("btn-revert").size(20).flex().items_center().justify_center().rounded(4).cursor_pointer()
@@ -429,7 +515,19 @@ export default class CodeEditorPane extends View {
           div().text_size(13).text_color(t.ansi1).child(this.error)
         )
       ))
-      .when(!this.loading && !this.error && Boolean(this.editorState), el => el.child(
+      .when(!this.loading && !this.error && this.isMarkdown && this.mdPreview, el => el.child(
+        div().id("md-preview-scroll").flex_1().min_h(0).min_w(0).overflow_y_scrollbar()
+          .child(
+            v_flex().w_full().max_w(820).px(24).py(20).text_size(14).text_color(t.foreground)
+              .child(
+                TextView.markdown(
+                  "md-preview-view",
+                  formatMarkdownFrontMatter(this.editorState ? this.editorState.value() : this.cleanText)
+                ).on_link_click((url, cx) => this.followLink(url, cx))
+              )
+          )
+      ))
+      .when(!this.loading && !this.error && Boolean(this.editorState) && (!this.isMarkdown || !this.mdPreview), el => el.child(
         Editor.new(this.editorState).flex_1().min_h(0).min_w(0)
       ));
   }

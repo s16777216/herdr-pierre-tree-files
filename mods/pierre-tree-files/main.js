@@ -2,7 +2,7 @@
 // with VS Code's Material Icon Theme icons, compact folder nesting, and instant filter search.
 import { View, div, svg, image } from "gpui-kit";
 import { v_flex, h_flex, Editor, EditorState, InputState, Input } from "gpui-base";
-import { spaces, panes, focused, layout, exec, readTextFile, watchFolder, theme, settings, window, run } from "herdr";
+import { spaces, panes, focused, layout, exec, readTextFile, watchFolder, theme, settings, window, run, openOverlay, shared } from "herdr";
 import ICONS from "./icons.js";
 import { PierreTreeModel } from "./tree.js";
 
@@ -358,6 +358,11 @@ export default class Files extends View {
           });
         }
       })
+      .on_mouse_down("right", (_e, cx) => {
+        _e.stop_propagation?.();
+        cx.stop_propagation?.();
+        this.openContextMenu(row);
+      })
       .child(
         isDir
           ? (isPending
@@ -378,7 +383,60 @@ export default class Files extends View {
       ));
   }
 
+  openContextMenu(row) {
+    const fullPath = this.root ? `${this.root}/${row.path}`.replace(/\\/g, "/") : row.path;
+    const isDir = row.type === "dir";
+    openOverlay({
+      mod: "pierre-tree-files-menu",
+      kind: "popup",
+      width: 210,
+      height: isDir ? 290 : 265,
+      props: {
+        mode: "menu",
+        fullPath,
+        relPath: row.path,
+        name: row.name || row.path.split(/[\\/]/).pop() || "",
+        isDir,
+        isOpen: Boolean(row.open),
+        root: this.root,
+        on: this.on
+      }
+    });
+  }
+
+  openRootContextMenu() {
+    if (!this.root) return;
+    openOverlay({
+      mod: "pierre-tree-files-menu",
+      kind: "popup",
+      width: 210,
+      height: 190,
+      props: {
+        mode: "root-menu",
+        fullPath: this.root,
+        relPath: "",
+        name: this.root.split(/[\\/]/).pop() || "",
+        isDir: true,
+        root: this.root,
+        on: this.on
+      }
+    });
+  }
+
   render(cx) {
+    const menuAction = shared("pierre-tree-files.action");
+    if (menuAction?.seq && menuAction.seq !== this.lastMenuActionSeq) {
+      this.lastMenuActionSeq = menuAction.seq;
+      if (menuAction.type === "toggle" && menuAction.relPath) {
+        const target = this.treeModel.project(this.marks, this.root).rows.find(r => r.path === menuAction.relPath);
+        if (target) this.toggleDir(target, cx);
+      }
+    }
+    const menuRefresh = shared("pierre-tree-files.refresh");
+    if (menuRefresh?.seq && menuRefresh.seq !== this.lastMenuRefreshSeq) {
+      this.lastMenuRefreshSeq = menuRefresh.seq;
+      this.refresh(cx, true);
+    }
     if (key() !== this.context || (this.stale && isFilesVisible())) this.refresh(cx, true);
     const t = theme(), dark = Boolean(settings().dark);
     const treeProject = !this.file ? this.treeModel.project(this.marks, this.root) : null;
@@ -402,7 +460,7 @@ export default class Files extends View {
           this.toggleSearch(cx);
         }
       })
-      .size_full().min_h(0).rounded(10).overflow_hidden().bg(t.background).border_1().border_color(t.border).text_color(t.foreground).text_size(13)
+      .size_full().min_h(0).overflow_hidden().bg(t.background).border_l(1).border_color(t.border).text_color(t.foreground).text_size(13)
       // Header
       .child(h_flex().h(42).flex_none().px(14).gap(6).items_center().border_b(1).border_color(t.border)
         .when(Boolean(this.file), el => el.child(div().id("files-back").w(20).cursor_pointer().text_color(t.muted).hover(s => s.text_color(t.foreground)).on_click((_e, cx) => { this.show(null, cx); cx.notify(); }).child("←")))
@@ -450,6 +508,9 @@ export default class Files extends View {
         const { rows, isSearching } = treeProject;
         return el.child(
           v_flex().id("files-tree").flex_1().min_h(0).overflow_y_scrollbar().p(4)
+            .on_mouse_down("right", () => {
+              this.openRootContextMenu();
+            })
             .children(rows.flatMap(r => {
               const rowEl = this.treeRow(r, t, dark);
               if (r.type === "dir" && r.open && this.pending.has(r.path)) {

@@ -337,6 +337,7 @@ export default class Files extends View {
 
   treeRow(row, t, dark) {
     const isDir = row.type === "dir";
+    const isPending = isDir && this.pending.has(row.path);
     const indent = 6 + row.depth * 14;
     const isSelected = this.file === row.path;
 
@@ -357,7 +358,13 @@ export default class Files extends View {
           });
         }
       })
-      .child(isDir ? svg(`${DIR}/chevron-${row.open ? "down" : "right"}.svg`).size(12).flex_none().text_color(t.dim) : div().w(12).flex_none())
+      .child(
+        isDir
+          ? (isPending
+              ? svg(ICON("spinner")).size(12).flex_none().text_color(t.accent ?? t.dim)
+              : svg(`${DIR}/chevron-${row.open ? "down" : "right"}.svg`).size(12).flex_none().text_color(t.dim))
+          : div().w(12).flex_none()
+      )
       .child(image(icon(row.path, isDir, row.open, dark)).size(15).flex_none())
       .child(div().flex_1().min_w(0).truncate().text_size(12).font_medium()
         .text_color(row.mark === "D" ? t.muted : t.foreground).child(row.name))
@@ -443,7 +450,17 @@ export default class Files extends View {
         const { rows, isSearching } = treeProject;
         return el.child(
           v_flex().id("files-tree").flex_1().min_h(0).overflow_y_scrollbar().p(4)
-            .children(rows.map(r => this.treeRow(r, t, dark)))
+            .children(rows.flatMap(r => {
+              const rowEl = this.treeRow(r, t, dark);
+              if (r.type === "dir" && r.open && this.pending.has(r.path)) {
+                const loadingIndent = 6 + (r.depth + 1) * 14 + 18;
+                const loadingRow = h_flex().id(`loading-${r.path}`).h(24).flex_none().pl(loadingIndent).pr(8).gap(6).items_center()
+                  .child(svg(ICON("spinner")).size(11).flex_none().text_color(t.dim))
+                  .child(div().text_size(11.5).text_color(t.dim).child("Loading…"));
+                return [rowEl, loadingRow];
+              }
+              return [rowEl];
+            }))
             .when(Boolean(this.error) || (!rows.length && !isSearching), e => e.child(
               div().p(12).text_size(12).text_color(t.dim).child(this.error || (this.loading ? "Loading files…" : this.root ? "No files" : "No folder"))
             ))

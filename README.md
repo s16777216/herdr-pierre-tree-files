@@ -40,28 +40,41 @@ Your agent will automatically copy the `mods/` directory into your `~/.config/he
 
 ### Manual Installation
 
-Copy both mods from the `mods/` directory into your Herdr configuration folder:
+Copy the three mods from the `mods/` directory (`pierre-tree-files`, `pierre-tree-files-editor`, `pierre-tree-files-tab`) into your Herdr configuration folder:
 - **Windows**: `%USERPROFILE%\.config\herdr-app\mods\`
 - **macOS / Linux**: `~/.config/herdr-app/mods/`
 
 Then verify with:
 ```bash
 herdr-app check ~/.config/herdr-app/mods/pierre-tree-files
-herdr-app check ~/.config/herdr-app/mods/editor
+herdr-app check ~/.config/herdr-app/mods/pierre-tree-files-editor
+herdr-app check ~/.config/herdr-app/mods/pierre-tree-files-tab
 ```
 
 ---
 
 ## 🛠 Enabling in Your Layout
 
-In your Herdr layout file (e.g. `~/.config/herdr-app/layouts/main.json` or your custom layout), set the mod name of the file panel block to `"pierre-tree-files"`:
+In your Herdr layout file (e.g. `~/.config/herdr-app/layouts/main.json` or your custom layout):
 
+1. Set the file panel block mod to `"pierre-tree-files"`:
 ```json
 {
   "id": "files",
   "type": "block",
   "content": {
     "mod": "pierre-tree-files"
+  }
+}
+```
+
+2. *(Optional)* To show Material file icons on editor tabs, set your tabs block mod to `"pierre-tree-files-tab"`:
+```json
+{
+  "id": "tabs",
+  "type": "block",
+  "content": {
+    "mod": "pierre-tree-files-tab"
   }
 }
 ```

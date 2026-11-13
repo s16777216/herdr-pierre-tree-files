@@ -406,7 +406,7 @@ export default class CodeEditorPane extends View {
               .hover(s => s.bg(t.hover).text_color(t.foreground))
               .tooltip("放棄變更，復原為磁碟檔案")
               .on_click((_e, cx) => this.revert(cx))
-              .child(svg("mods/editor/icons/undo.svg").size(12))
+              .child(svg("mods/pierre-tree-files-editor/icons/undo.svg").size(12))
           ))
           // Save Button (Pure SVG icon button, no background highlight)
           .child(
@@ -415,7 +415,7 @@ export default class CodeEditorPane extends View {
               .hover(s => s.bg(t.hover).text_color(t.foreground))
               .tooltip(this.isDirty ? "儲存檔案 (⌘S)" : "已是最新版本")
               .on_click((_e, cx) => this.save(cx))
-              .child(svg("mods/editor/icons/save.svg").size(12))
+              .child(svg("mods/pierre-tree-files-editor/icons/save.svg").size(12))
           )
       )
       // Editor body or loading/error

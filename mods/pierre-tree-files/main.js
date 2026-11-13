@@ -353,7 +353,7 @@ export default class Files extends View {
           run("tab.new", {
             name: fileName,
             folder: this.root,
-            mod: "editor",
+            mod: "pierre-tree-files-editor",
             props: { file: fullPath, on: this.on }
           });
         }

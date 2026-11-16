@@ -44,8 +44,9 @@ A fast, modern file explorer, code editor, and image viewer suite for Herdr App 
 
 ## Done when
 
-1. `herdr-app check` passes with exit code 0 for all three mods (`pierre-tree-files`, `pierre-tree-files-editor`, `pierre-tree-files-tab`).
+1. `herdr-app check` passes with exit code 0 for all four mods (`pierre-tree-files`, `pierre-tree-files-editor`, `pierre-tree-files-menu`, `pierre-tree-files-tab`).
 2. Clicking an uncached folder immediately shows a spinning loader and `Loading…` row before rendering children.
-3. Clicking a code file opens a standalone `pierre-tree-files-editor` tab with file icon in `pierre-tree-files-tab`, while the sidebar tree retains the project CWD.
-4. Editing a file and pressing `Ctrl+S` / `Cmd+S` saves atomically and clears the dirty indicator dot.
-5. Clicking an image opens it cleanly in Fit mode without flashing, and `+`/`-`/`0` zoom controls work smoothly.
+3. Clicking a code file opens a standalone `pierre-tree-files-editor` tab with file icon in `pierre-tree-files-tab` (with the `Changes` panel button labeled `Git`), while the sidebar tree retains the project CWD.
+4. Opening `.md`/`.markdown`/`.mdx` defaults to `Preview` (`TextView.markdown`) with a `Preview | Source` toggle and clickable links; editing and pressing `Ctrl+S` / `Cmd+S` saves atomically and clears the dirty indicator dot.
+5. Right-clicking any file, folder, or empty space in `pierre-tree-files` opens `pierre-tree-files-menu` (open, copy path/relative path, reveal in Explorer, open terminal here, new file/folder, rename, delete).
+6. Clicking an image opens it cleanly in Fit mode without flashing, and `+`/`-`/`0` zoom controls work smoothly.

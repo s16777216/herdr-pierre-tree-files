@@ -17,7 +17,7 @@ function parentRelOf(rel) {
 }
 
 function toWinPath(p) {
-  return (p || "").replace(/\//g, "\\");
+  return (p || "").replace(/[\\/]+/g, "\\").replace(/([^:])\\+$/, "$1");
 }
 
 function shQuote(s) {
@@ -105,7 +105,7 @@ export default class FileContextMenu extends View {
     }
     if (plat === "windows") {
       const wp = toWinPath(full);
-      await exec("explorer.exe", p.isDir ? [wp] : [`/select,${wp}`]).catch(() => {});
+      await exec("explorer.exe", p.isDir ? [wp] : ["/select,", wp]).catch(() => {});
     } else if (plat === "macos") {
       await exec("open", p.isDir ? [full] : ["-R", full]).catch(() => {});
     } else {

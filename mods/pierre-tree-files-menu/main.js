@@ -1,6 +1,73 @@
 import { View, div } from "gpui-kit";
 import { v_flex, h_flex, Input, InputState } from "gpui-base";
-import { props, closeOverlay, openOverlay, run, exec, theme, notify, setShared, writeTextFile, readTextFile, window as win } from "herdr";
+import { props, closeOverlay, openOverlay, run, exec, theme, notify, shared, setShared, writeTextFile, readTextFile, spaces, panes, focused, window as win } from "herdr";
+
+function normFilePath(p) {
+  return (p || "").replace(/[\\/]+/g, "/").replace(/\/+$/, "").toLowerCase();
+}
+
+function openOrFocusFile(fullPath, fileName, root, on) {
+  const space = (spaces() ?? []).find(s => s.active);
+  const allPanes = panes() ?? [];
+  const openMap = shared("pierre-tree-files.open_files") ?? {};
+  const targetNorm = normFilePath(fullPath);
+
+  if (space) {
+    const spaceTabMap = new Map((space.tabs ?? []).map(tab => [tab.id, tab]));
+    let match = allPanes.find(p => spaceTabMap.has(p.tab) && openMap[p.pane]?.file === targetNorm);
+    if (!match) {
+      match = allPanes.find(
+        p =>
+          spaceTabMap.has(p.tab) &&
+          p.mod === "pierre-tree-files-editor" &&
+          !openMap[p.pane] &&
+          spaceTabMap.get(p.tab)?.name === fileName
+      );
+    }
+    if (match) {
+      run("tab.select", { id: match.tab });
+      run("pane.focus", { pane: match.pane });
+      return;
+    }
+  }
+
+  run("tab.new", {
+    name: fileName,
+    folder: root,
+    mod: "pierre-tree-files-editor",
+    props: { file: fullPath, on }
+  });
+}
+
+function splitOrFocusFile(fullPath, direction = "right", root, on) {
+  const space = (spaces() ?? []).find(s => s.active);
+  const activeTab = (space?.tabs ?? []).find(t => t.active);
+  const allPanes = panes() ?? [];
+  const openMap = shared("pierre-tree-files.open_files") ?? {};
+  const targetNorm = normFilePath(fullPath);
+
+  if (activeTab) {
+    const tabPanes = allPanes.filter(p => p.tab === activeTab.id);
+    const existing = tabPanes.find(p => openMap[p.pane]?.file === targetNorm);
+    if (existing) {
+      run("pane.focus", { pane: existing.pane });
+      return;
+    }
+    const f = focused();
+    const basePane = (f?.pane && tabPanes.some(p => p.pane === f.pane)) ? f.pane : tabPanes[0]?.pane;
+    if (basePane) {
+      run("pane.split", {
+        pane: basePane,
+        direction,
+        mod: "pierre-tree-files-editor",
+        props: { file: fullPath, on }
+      });
+      return;
+    }
+  }
+  const fileName = (fullPath || "").split(/[\\/]/).pop() || "Editor";
+  openOrFocusFile(fullPath, fileName, root, on);
+}
 
 function parentOf(p) {
   return (p || "").replace(/[\\/][^\\/]+$/, "") || p;
@@ -154,12 +221,7 @@ export default class FileContextMenu extends View {
           setShared("pierre-tree-files.refresh", { seq: Date.now(), dir: p.relDir ?? "" });
           closeOverlay(overlay);
           if (this.mode === "new-file") {
-            run("tab.new", {
-              name: basenameOf(target),
-              folder: p.root,
-              mod: "pierre-tree-files-editor",
-              props: { file: target, on }
-            });
+            openOrFocusFile(target, basenameOf(target), p.root, on);
           }
           return;
         } else if (this.mode === "rename") {
@@ -320,12 +382,15 @@ export default class FileContextMenu extends View {
       .when(!p.isDir, el => el
         .child(this.menuItem("m-open", "在編輯器開啟", t, () => {
           this.close();
-          run("tab.new", {
-            name: p.name,
-            folder: p.root,
-            mod: "pierre-tree-files-editor",
-            props: { file: p.fullPath, on: p.on }
-          });
+          openOrFocusFile(p.fullPath, p.name, p.root, p.on);
+        }))
+        .child(this.menuItem("m-split-right", "向右分割開啟", t, () => {
+          this.close();
+          splitOrFocusFile(p.fullPath, "right", p.root, p.on);
+        }))
+        .child(this.menuItem("m-split-down", "向下分割開啟", t, () => {
+          this.close();
+          splitOrFocusFile(p.fullPath, "down", p.root, p.on);
         }))
         .child(this.divider(t))
       )

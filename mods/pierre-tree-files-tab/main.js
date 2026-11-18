@@ -1,6 +1,6 @@
 import { View, div, svg, image } from "gpui-kit";
-import { h_flex, ScrollHandle } from "gpui-base";
-import { spaces, panes, run, openOverlay, theme, window, shared, layout, settings } from "herdr";
+import { v_flex, h_flex, ScrollHandle } from "gpui-base";
+import { spaces, panes, run, openOverlay, closeOverlay, props, keys, theme, window, shared, layout, settings } from "herdr";
 import ICONS from "./icons.js";
 
 const ICONS_DIR = "mods/pierre-tree-files";
@@ -28,9 +28,45 @@ function find(node, id) {
 
 export default class Tabs extends View {
   init() {
+    if (props()?.editorTabMenu) return;
     this.pressed = null;
     this.scroll = ScrollHandle.new();
     this.panels = JSON.parse(localStorage.getItem("panels") ?? "{}");
+  }
+
+  renderEditorTabMenu(t) {
+    const tg = props()?.target ?? {};
+    const rows = [
+      { id: "etm-new", label: "New tab", icon: "plus", cmd: "tab.new", args: { space: tg.space } },
+      { id: "etm-close", label: "Close", icon: "x", cmd: "tab.close", args: { id: tg.id } },
+    ];
+    return v_flex()
+      .id("editor-tab-menu")
+      .w_full()
+      .p(5)
+      .bg(t.popover)
+      .text_size(12.8)
+      .children(rows.map((it) => {
+        const value = it.args && Object.values(it.args)[0];
+        const k = keys().find((b) => b.section === "global" && (b.action === it.cmd || b.action === `${it.cmd}:${value}`));
+        return h_flex()
+          .id(it.id)
+          .h(30)
+          .px(8)
+          .gap(9)
+          .rounded(7)
+          .items_center()
+          .cursor_pointer()
+          .text_color(t.foreground)
+          .hover((s) => s.bg(t.hover))
+          .on_click(() => {
+            closeOverlay(props()?.overlay);
+            run(it.cmd, it.args);
+          })
+          .child(svg(`mods/workspace-chrome/${it.icon}.svg`).size(14).flex_none().text_color(t.muted))
+          .child(div().flex_1().child(it.label))
+          .when(Boolean(k?.keys), (el) => el.child(div().text_size(11).text_color(t.dim).child(k.keys)));
+      }));
   }
 
   // The side panel is remembered per space: switching shows that space's choice
@@ -63,6 +99,7 @@ export default class Tabs extends View {
 
   render() {
     const t = theme();
+    if (props()?.editorTabMenu) return this.renderEditorTabMenu(t);
     const dark = Boolean(settings()?.dark);
     const space = spaces().find(p => p.active);
     const shown = space?.tabs ?? [];
@@ -88,13 +125,20 @@ export default class Tabs extends View {
         .when(i <= active, el => el.on_size_change((_size, cx) => { this.scroll.scroll_to_item(active); cx.notify(); }))
         .border(1).border_color(c.active ? t.border : t.chrome).bg(c.active ? t.raised : t.chrome).text_color(c.active ? t.foreground : t.muted)
         .hover(s => s.bg(t.hover))
-        .on_mouse_down("left", (e, cx) => { cx.stop_propagation(); this.pressed = i; if (e.click_count === 2) run("tab.rename", { id: c.id }); })
+        .on_mouse_down("left", (e, cx) => { cx.stop_propagation(); this.pressed = i; if (e.click_count === 2 && !isEditorTab) run("tab.rename", { id: c.id }); })
         .on_mouse_up("left", () => {
           const from = this.pressed; this.pressed = null;
           if (from !== null && from !== i) run("tab.move", { id: shown[from].id, index: space.tabs.findIndex(x => x.id === c.id) + 1 });
           else run("tab.select", { id: c.id });
         })
-        .on_mouse_down("right", (_e, cx) => { cx.stop_propagation(); openOverlay({ mod: "menu", kind: "popup", width: 200, props: { tab: "tab", target: { id: c.id, space: space.id } } }); })
+        .on_mouse_down("right", (_e, cx) => {
+          cx.stop_propagation();
+          if (isEditorTab) {
+            openOverlay({ mod: "pierre-tree-files-tab", kind: "popup", width: 180, height: 74, props: { editorTabMenu: true, target: { id: c.id, space: space.id } } });
+          } else {
+            openOverlay({ mod: "menu", kind: "popup", width: 200, props: { tab: "tab", target: { id: c.id, space: space.id } } });
+          }
+        })
         .when(Boolean(program?.icon), el => el.child(program.tint ? svg(program.icon).size(14).text_color(t.muted) : image(program.icon).size(14)))
         .when(Boolean(fileIcon), el => el.child(image(fileIcon).size(14).flex_none()))
         .child(div().max_w(170).truncate().child(c.zoomed ? `${name} Z` : name))

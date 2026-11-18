@@ -8,6 +8,73 @@ import { PierreTreeModel } from "./tree.js";
 
 const lastCwdBySpace = new Map();
 
+function normFilePath(p) {
+  return (p || "").replace(/[\\/]+/g, "/").replace(/\/+$/, "").toLowerCase();
+}
+
+function openOrFocusFile(fullPath, fileName, root, on) {
+  const space = (spaces() ?? []).find(s => s.active);
+  const allPanes = panes() ?? [];
+  const openMap = shared("pierre-tree-files.open_files") ?? {};
+  const targetNorm = normFilePath(fullPath);
+
+  if (space) {
+    const spaceTabMap = new Map((space.tabs ?? []).map(tab => [tab.id, tab]));
+    let match = allPanes.find(p => spaceTabMap.has(p.tab) && openMap[p.pane]?.file === targetNorm);
+    if (!match) {
+      match = allPanes.find(
+        p =>
+          spaceTabMap.has(p.tab) &&
+          p.mod === "pierre-tree-files-editor" &&
+          !openMap[p.pane] &&
+          spaceTabMap.get(p.tab)?.name === fileName
+      );
+    }
+    if (match) {
+      run("tab.select", { id: match.tab });
+      run("pane.focus", { pane: match.pane });
+      return;
+    }
+  }
+
+  run("tab.new", {
+    name: fileName,
+    folder: root,
+    mod: "pierre-tree-files-editor",
+    props: { file: fullPath, on }
+  });
+}
+
+function splitOrFocusFile(fullPath, direction = "right", root, on) {
+  const space = (spaces() ?? []).find(s => s.active);
+  const activeTab = (space?.tabs ?? []).find(t => t.active);
+  const allPanes = panes() ?? [];
+  const openMap = shared("pierre-tree-files.open_files") ?? {};
+  const targetNorm = normFilePath(fullPath);
+
+  if (activeTab) {
+    const tabPanes = allPanes.filter(p => p.tab === activeTab.id);
+    const existing = tabPanes.find(p => openMap[p.pane]?.file === targetNorm);
+    if (existing) {
+      run("pane.focus", { pane: existing.pane });
+      return;
+    }
+    const f = focused();
+    const basePane = (f?.pane && tabPanes.some(p => p.pane === f.pane)) ? f.pane : tabPanes[0]?.pane;
+    if (basePane) {
+      run("pane.split", {
+        pane: basePane,
+        direction,
+        mod: "pierre-tree-files-editor",
+        props: { file: fullPath, on }
+      });
+      return;
+    }
+  }
+  const fileName = (fullPath || "").split(/[\\/]/).pop() || "Editor";
+  openOrFocusFile(fullPath, fileName, root, on);
+}
+
 function location() {
   const space = spaces().find(s => s.active), f = focused();
   const allPanes = panes() ?? [];
@@ -339,23 +406,29 @@ export default class Files extends View {
     const isDir = row.type === "dir";
     const isPending = isDir && this.pending.has(row.path);
     const indent = 6 + row.depth * 14;
-    const isSelected = this.file === row.path;
+    const fullPath = this.root ? `${this.root}/${row.path}`.replace(/\\/g, "/") : row.path;
+    const focusedPane = focused()?.pane;
+    const activeFileNorm = focusedPane ? (shared("pierre-tree-files.open_files") ?? {})[focusedPane]?.file : null;
+    const isSelected = this.file === row.path || (!isDir && Boolean(activeFileNorm) && activeFileNorm === normFilePath(fullPath));
 
     return h_flex().id(`file-${row.path}`).h(26).flex_none().pl(indent).pr(8).gap(6).items_center().rounded(6).cursor_pointer()
       .when(isSelected, el => el.bg(t.selected))
       .hover(s => s.bg(isSelected ? t.selected : t.hover))
-      .on_click((_e, cx) => {
+      .on_hover((on, cx) => {
+        if (on) this.hoveredPath = row.path;
+        else if (this.hoveredPath === row.path) this.hoveredPath = null;
+        cx.notify();
+      })
+      .on_click((e, cx) => {
         if (isDir) {
           this.toggleDir(row, cx);
         } else {
-          const fullPath = this.root ? `${this.root}/${row.path}`.replace(/\\/g, "/") : row.path;
           const fileName = row.name || row.path.split(/[\\/]/).pop() || "Editor";
-          run("tab.new", {
-            name: fileName,
-            folder: this.root,
-            mod: "pierre-tree-files-editor",
-            props: { file: fullPath, on: this.on }
-          });
+          if (e?.modifiers?.control || e?.modifiers?.platform || e?.modifiers?.alt) {
+            splitOrFocusFile(fullPath, "right", this.root, this.on);
+          } else {
+            openOrFocusFile(fullPath, fileName, this.root, this.on);
+          }
         }
       })
       .on_mouse_down("right", (_e, cx) => {
@@ -373,6 +446,25 @@ export default class Files extends View {
       .child(image(icon(row.path, isDir, row.open, dark)).size(15).flex_none())
       .child(div().flex_1().min_w(0).truncate().text_size(12).font_medium()
         .text_color(row.mark === "D" ? t.muted : t.foreground).child(row.name))
+      .when(!isDir && this.hoveredPath === row.path, el => el.child(
+        div()
+          .id(`split-${row.path}`)
+          .size(20)
+          .flex_none()
+          .flex()
+          .items_center()
+          .justify_center()
+          .rounded(4)
+          .text_color(t.muted)
+          .hover(s => s.bg(t.raised).text_color(t.foreground))
+          .tooltip("向右分割開啟 (Ctrl+Click)")
+          .on_mouse_down("left", (_e, cx) => cx.stop_propagation())
+          .on_click((_e, cx) => {
+            cx.stop_propagation();
+            splitOrFocusFile(fullPath, "right", this.root, this.on);
+          })
+          .child(svg(ICON("panel-right")).size(12))
+      ))
       .when(isDir && row.markCount > 0, el => el.child(
         div().px(5).py(1).rounded(4).bg(t.ansi3 + "22").text_color(t.ansi3).text_size(10).font_medium().child(String(row.markCount))
       ))
@@ -390,7 +482,7 @@ export default class Files extends View {
       mod: "pierre-tree-files-menu",
       kind: "popup",
       width: 210,
-      height: isDir ? 290 : 265,
+      height: isDir ? 290 : 315,
       props: {
         mode: "menu",
         fullPath,

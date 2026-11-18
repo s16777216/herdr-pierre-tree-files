@@ -1,6 +1,43 @@
 import { View, div, svg, image } from "gpui-kit";
 import { v_flex, h_flex, Editor, EditorState, TextView } from "gpui-base";
-import { props, readTextFile, writeTextFile, theme, settings, notify, exec, appHome, run } from "herdr";
+import { props, readTextFile, writeTextFile, theme, settings, notify, exec, appHome, run, spaces, panes, focused, shared, setShared } from "herdr";
+
+function normFilePath(p) {
+  return (p || "").replace(/[\\/]+/g, "/").replace(/\/+$/, "").toLowerCase();
+}
+
+function openOrFocusEditorFile(fullPath, fileName, root, on) {
+  const space = (spaces() ?? []).find((s) => s.active);
+  const allPanes = panes() ?? [];
+  const openMap = shared("pierre-tree-files.open_files") ?? {};
+  const targetNorm = normFilePath(fullPath);
+
+  if (space) {
+    const spaceTabMap = new Map((space.tabs ?? []).map((tab) => [tab.id, tab]));
+    let match = allPanes.find((p) => spaceTabMap.has(p.tab) && openMap[p.pane]?.file === targetNorm);
+    if (!match) {
+      match = allPanes.find(
+        (p) =>
+          spaceTabMap.has(p.tab) &&
+          p.mod === "pierre-tree-files-editor" &&
+          !openMap[p.pane] &&
+          spaceTabMap.get(p.tab)?.name === fileName
+      );
+    }
+    if (match) {
+      run("tab.select", { id: match.tab });
+      run("pane.focus", { pane: match.pane });
+      return;
+    }
+  }
+
+  run("tab.new", {
+    name: fileName,
+    folder: root,
+    mod: "pierre-tree-files-editor",
+    props: { file: fullPath, on }
+  });
+}
 
 const IMAGE_EXTS = new Set(["png", "jpg", "jpeg", "gif", "webp", "ico", "bmp", "svg"]);
 function isImageFile(filePath) {
@@ -116,17 +153,105 @@ export default class CodeEditorPane extends View {
     this.zoom = 1.0;
     this.imgWidth = 0;
     this.imgHeight = 0;
+    this.paneId = null;
+    this.tabId = null;
+    this.spaceId = null;
 
     cx.bind_keys([
       { keystroke: "ctrl-s", action: "code_editor_save", context: "CodeEditor" },
       { keystroke: "cmd-s", action: "code_editor_save", context: "CodeEditor" }
     ]);
 
+    this.syncOpenFileRegistry();
+
     if (this.file) {
       this.loadFile(cx);
     } else {
       this.loading = false;
       this.error = "No file specified";
+    }
+  }
+
+  syncOpenFileRegistry() {
+    if (!this.file) return;
+    const allPanes = panes() ?? [];
+    const livePaneMap = new Map(allPanes.map((p) => [p.pane, p]));
+    const prevMap = shared("pierre-tree-files.open_files") ?? {};
+    const targetNorm = normFilePath(this.file);
+    const fileName = this.file.split(/[\\/]/).pop() || "";
+
+    if (!this.paneId || !livePaneMap.has(this.paneId)) {
+      this.paneId = null;
+      this.tabId = null;
+      this.spaceId = null;
+      const f = focused();
+      const fPane = f?.pane ? livePaneMap.get(f.pane) : null;
+      if (
+        fPane &&
+        fPane.mod === "pierre-tree-files-editor" &&
+        (!prevMap[fPane.pane] || prevMap[fPane.pane].file === targetNorm)
+      ) {
+        this.paneId = fPane.pane;
+        this.tabId = f.tab;
+        this.spaceId = f.space;
+      } else {
+        const allSpaces = spaces() ?? [];
+        const tabToSpace = new Map();
+        const tabNameMap = new Map();
+        for (const sp of allSpaces) {
+          for (const tb of sp.tabs ?? []) {
+            tabToSpace.set(tb.id, sp.id);
+            tabNameMap.set(tb.id, tb);
+          }
+        }
+        let candidate = allPanes.find(
+          (p) =>
+            p.mod === "pierre-tree-files-editor" &&
+            !prevMap[p.pane] &&
+            tabNameMap.get(p.tab)?.active &&
+            tabNameMap.get(p.tab)?.name === fileName
+        );
+        if (!candidate) {
+          const unclaimedActive = allPanes.filter(
+            (p) => p.mod === "pierre-tree-files-editor" && !prevMap[p.pane] && tabNameMap.get(p.tab)?.active
+          );
+          if (unclaimedActive.length === 1) candidate = unclaimedActive[0];
+        }
+        if (candidate) {
+          this.paneId = candidate.pane;
+          this.tabId = candidate.tab;
+          this.spaceId = tabToSpace.get(candidate.tab) ?? null;
+        }
+      }
+    }
+
+    const nextMap = {};
+    let changed = false;
+    for (const [k, v] of Object.entries(prevMap)) {
+      if (livePaneMap.has(k)) {
+        nextMap[k] = v;
+      } else {
+        changed = true;
+      }
+    }
+
+    if (this.paneId) {
+      const entry = {
+        pane: this.paneId,
+        tab: this.tabId,
+        space: this.spaceId,
+        file: targetNorm,
+        rawFile: this.file
+      };
+      const cur = nextMap[this.paneId];
+      if (!cur || cur.file !== entry.file || cur.tab !== entry.tab || cur.space !== entry.space) {
+        nextMap[this.paneId] = entry;
+        changed = true;
+      }
+    }
+
+    if (changed) {
+      setShared("pierre-tree-files.open_files", nextMap);
     }
   }
 
@@ -186,11 +311,7 @@ export default class CodeEditorPane extends View {
       try { cx.open_url(to.web); } catch {}
     } else if (to?.file) {
       const targetName = to.file.split(/[\\/]/).pop() || "Editor";
-      run("tab.new", {
-        name: targetName,
-        mod: "pierre-tree-files-editor",
-        props: { file: to.file, on: this.on }
-      });
+      openOrFocusEditorFile(to.file, targetName, undefined, this.on);
     }
   }
 
@@ -356,6 +477,7 @@ export default class CodeEditorPane extends View {
   }
 
   render(cx) {
+    this.syncOpenFileRegistry();
     const t = theme();
     const breadcrumbs = getBreadcrumbs(this.file);
     const fileName = breadcrumbs.length ? breadcrumbs[breadcrumbs.length - 1] : "Untitled";

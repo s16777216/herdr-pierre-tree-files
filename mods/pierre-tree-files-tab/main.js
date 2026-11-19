@@ -167,6 +167,14 @@ export default class Tabs extends View {
     return h_flex().size_full().min_w(0).px(10).pl(lightsPadding).gap(3).items_center().bg(t.chrome).border_b(1).border_color(t.border)
       .on_mouse_up("left", () => { this.pressed = null; })
       .on_scroll_wheel(e => { if (Math.abs(e.delta.y) >= 1) run(e.delta.y > 0 ? "tab.prev" : "tab.next"); })
+      // TopBar Brand: [Logo] Herdr
+      .child(
+        h_flex().id("topbar-brand").gap(8).items_center().px(4).pr(10).flex_none().cursor_pointer()
+          .hover(s => s.opacity(0.85))
+          .on_click(() => run("mod.open", { name: "picker" }))
+          .child(image("frame/welcome/herdr.png").size(18).rounded(4))
+          .child(div().font_semibold().text_size(13).text_color(t.foreground).child("Herdr"))
+      )
       .child(h_flex().id("tab-scroll").flex_1().min_w(0).h_full().items_center().gap(3).overflow_x_scrollbar().track_scroll(this.scroll)
         .on_size_change((_size, cx) => { if (active >= 0) { this.scroll.scroll_to_item(active); cx.notify(); } })
         .children(shown.map(item)))

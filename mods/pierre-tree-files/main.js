@@ -12,6 +12,12 @@ function normFilePath(p) {
   return (p || "").replace(/[\\/]+/g, "/").replace(/\/+$/, "").toLowerCase();
 }
 
+const BROWSER_EXTS = new Set(["html", "htm", "pdf", "svg", "xml", "png", "jpg", "jpeg", "gif", "webp"]);
+function isBrowserFile(p) {
+  if (!p || !p.includes(".")) return false;
+  return BROWSER_EXTS.has(p.split(".").pop().toLowerCase());
+}
+
 function openOrFocusFile(fullPath, fileName, root, on) {
   const space = (spaces() ?? []).find(s => s.active);
   const allPanes = panes() ?? [];
@@ -478,17 +484,20 @@ export default class Files extends View {
   openContextMenu(row) {
     const fullPath = this.root ? `${this.root}/${row.path}`.replace(/\\/g, "/") : row.path;
     const isDir = row.type === "dir";
+    const fileName = row.name || row.path.split(/[\\/]/).pop() || "";
+    const canOpenBrowser = !isDir && isBrowserFile(fileName);
     openOverlay({
       mod: "pierre-tree-files-menu",
       kind: "popup",
       width: 210,
-      height: isDir ? 290 : 315,
+      height: isDir ? 290 : (canOpenBrowser ? 342 : 315),
       props: {
         mode: "menu",
         fullPath,
         relPath: row.path,
-        name: row.name || row.path.split(/[\\/]/).pop() || "",
+        name: fileName,
         isDir,
+        canOpenBrowser,
         isOpen: Boolean(row.open),
         root: this.root,
         on: this.on

@@ -123,6 +123,60 @@ function getLanguage(filePath) {
   return LANG_MAP[ext] ?? ext ?? "text";
 }
 
+const LANG_DISPLAY = {
+  js: "JavaScript", ts: "TypeScript", json: "JSON", html: "HTML",
+  css: "CSS", markdown: "Markdown", python: "Python", rust: "Rust",
+  go: "Go", c: "C", cpp: "C++", csharp: "C#", java: "Java",
+  sh: "Shell Script", yaml: "YAML", toml: "TOML", ini: "INI",
+  sql: "SQL", ruby: "Ruby", php: "PHP", xml: "XML", text: "Plain Text"
+};
+
+function getLanguageLabel(filePath) {
+  const lang = getLanguage(filePath);
+  return LANG_DISPLAY[lang] ?? (lang.charAt(0).toUpperCase() + lang.slice(1));
+}
+
+function detectIndentAndEol(text) {
+  const eol = text.includes("\r\n") ? "CRLF" : "LF";
+  let spaces2 = 0, spaces4 = 0, tabs = 0;
+  const lines = text.split(/\r?\n/).slice(0, 100);
+  for (const line of lines) {
+    if (line.startsWith("\t")) tabs++;
+    else if (line.startsWith("    ")) spaces4++;
+    else if (line.startsWith("  ")) spaces2++;
+  }
+  let indent = "Spaces: 2";
+  if (tabs > spaces2 && tabs > spaces4) indent = "Tab Size: 4";
+  else if (spaces4 > spaces2) indent = "Spaces: 4";
+  return { eol, indent };
+}
+
+const VSCODE_DARK_SYNTAX = {
+  keyword: "#569cd6",
+  string: "#ce9178",
+  comment: "#6a9955",
+  function: "#dcdcaa",
+  type: "#4ec9b0",
+  number: "#b5cea8",
+  constant: "#4fc1ff",
+  variable: "#9cdcfe",
+  operator: "#d4d4d4",
+  punctuation: "#d4d4d4"
+};
+
+const VSCODE_LIGHT_SYNTAX = {
+  keyword: "#0000ff",
+  string: "#a31515",
+  comment: "#008000",
+  function: "#795e26",
+  type: "#267f99",
+  number: "#098658",
+  constant: "#0070c1",
+  variable: "#001080",
+  operator: "#000000",
+  punctuation: "#000000"
+};
+
 function getBreadcrumbs(filePath) {
   if (!filePath) return [];
   const norm = filePath.replace(/\\/g, "/");
@@ -145,6 +199,8 @@ export default class CodeEditorPane extends View {
     this.error = null;
     this.saving = false;
     this.lineCount = 0;
+    this.eol = "LF";
+    this.indent = "Spaces: 2";
     this.isImage = isImageFile(this.file);
     this.isMarkdown = isMarkdownFile(this.file);
     this.mdPreview = this.isMarkdown;
@@ -393,8 +449,14 @@ export default class CodeEditorPane extends View {
       this.cleanText = text;
       this.isDirty = false;
       this.lineCount = text.split("\n").length;
+      const meta = detectIndentAndEol(text);
+      this.eol = meta.eol;
+      this.indent = meta.indent;
+
       const t = theme();
       const s = settings();
+      const isDark = Boolean(settings()?.dark) || t.appearance !== "light";
+      const syntax = isDark ? VSCODE_DARK_SYNTAX : VSCODE_LIGHT_SYNTAX;
 
       this.editorState = EditorState.new({
         language: getLanguage(this.file),
@@ -404,24 +466,16 @@ export default class CodeEditorPane extends View {
         folding: true,
         font_family: s?.font_family,
         font_size: s?.font_size ?? 13,
-        syntax: {
-          keyword: t.ansi5,
-          string: t.ansi2,
-          comment: t.dim,
-          function: t.ansi4,
-          type: t.ansi3,
-          number: t.ansi1,
-          constant: t.ansi6,
-          variable: t.foreground,
-          operator: t.accent,
-          punctuation: t.muted
-        }
+        syntax
       });
 
       this.editorState.on("change", (_e, cx) => {
         if (!this.editorState) return;
         const current = this.editorState.value();
         this.lineCount = current.split("\n").length;
+        const curMeta = detectIndentAndEol(current);
+        this.eol = curMeta.eol;
+        this.indent = curMeta.indent;
         const dirtyNow = current !== this.cleanText;
         if (dirtyNow !== this.isDirty) {
           this.isDirty = dirtyNow;
@@ -564,7 +618,15 @@ export default class CodeEditorPane extends View {
                       image(this.imageAssetPath).when(Boolean(scaledW && scaledH), img => img.w(scaledW).h(scaledH))
                     )
             ))
-        );
+        )
+        // Image Footer Status Bar (h=22)
+        .when(!this.loading && !this.error, el => el.child(
+          h_flex().h(22).flex_none().px(10).gap(12).items_center().border_t(1).border_color(t.border).bg(t.raised).text_size(11).text_color(t.dim)
+            .child(div().child(this.imgWidth && this.imgHeight ? `${this.imgWidth} × ${this.imgHeight} px` : "Image"))
+            .child(div().flex_1())
+            .child(div().child(zoomLabel))
+            .child(div().child((this.file.split(".").pop() || "IMG").toUpperCase()))
+        ));
     }
 
     return v_flex().id("editor-pane").key_context("CodeEditor").size_full().min_h(0).min_w(0).bg(t.background).text_color(t.foreground)
@@ -651,6 +713,16 @@ export default class CodeEditorPane extends View {
       ))
       .when(!this.loading && !this.error && Boolean(this.editorState) && (!this.isMarkdown || !this.mdPreview), el => el.child(
         Editor.new(this.editorState).flex_1().min_h(0).min_w(0)
+      ))
+      // Editor Footer Status Bar (VS Code style, h=22)
+      .when(!this.loading && !this.error, el => el.child(
+        h_flex().h(22).flex_none().px(10).gap(12).items_center().border_t(1).border_color(t.border).bg(t.raised).text_size(11).text_color(t.dim)
+          .child(div().child(`${this.lineCount} lines`))
+          .child(div().flex_1())
+          .child(div().hover(s => s.text_color(t.foreground)).child(this.indent || "Spaces: 2"))
+          .child(div().hover(s => s.text_color(t.foreground)).child("UTF-8"))
+          .child(div().hover(s => s.text_color(t.foreground)).child(this.eol || "LF"))
+          .child(div().hover(s => s.text_color(t.foreground)).child(getLanguageLabel(this.file)))
       ));
   }
 }

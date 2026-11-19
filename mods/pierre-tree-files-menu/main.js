@@ -6,6 +6,12 @@ function normFilePath(p) {
   return (p || "").replace(/[\\/]+/g, "/").replace(/\/+$/, "").toLowerCase();
 }
 
+const BROWSER_EXTS = new Set(["html", "htm", "pdf", "svg", "xml", "png", "jpg", "jpeg", "gif", "webp"]);
+function isBrowserFile(p) {
+  if (!p || !p.includes(".")) return false;
+  return BROWSER_EXTS.has(p.split(".").pop().toLowerCase());
+}
+
 function openOrFocusFile(fullPath, fileName, root, on) {
   const space = (spaces() ?? []).find(s => s.active);
   const allPanes = panes() ?? [];
@@ -177,6 +183,33 @@ export default class FileContextMenu extends View {
       await exec("open", p.isDir ? [full] : ["-R", full]).catch(() => {});
     } else {
       await exec("xdg-open", [p.isDir ? full : parentOf(full)]).catch(() => {});
+    }
+  }
+
+  async openInBrowser() {
+    const p = props() ?? {};
+    const full = p.fullPath;
+    if (!full) return;
+    if (p.on) {
+      notify({ title: "不支援遠端瀏覽器", body: "遠端主機上的檔案無法在本機瀏覽器開啟" });
+      return;
+    }
+    const plat = win()?.platform;
+    if (plat === "windows") {
+      const wp = toWinPath(full);
+      const q = "'" + wp.replace(/'/g, "''") + "'";
+      const ps = [
+        `$f = ${q}`,
+        `$url = ([uri]$f).AbsoluteUri`,
+        `$pidKey = (Get-ItemProperty -Path 'HKCU:\\Software\\Microsoft\\Windows\\Shell\\Associations\\UrlAssociations\\https\\UserChoice' -ErrorAction SilentlyContinue).ProgId`,
+        `$cmd = if ($pidKey) { (Get-ItemProperty -Path ('Registry::HKEY_CLASSES_ROOT\\' + $pidKey + '\\shell\\open\\command') -ErrorAction SilentlyContinue).'(default)' } else { $null }`,
+        `if ($cmd -and $cmd -match '^"([^"]+)"') { Start-Process -FilePath $Matches[1] -ArgumentList @($url) } else { Start-Process -FilePath $f }`
+      ].join("; ");
+      await exec("powershell", ["-NoProfile", "-Command", ps]).catch(() => {});
+    } else if (plat === "macos") {
+      await exec("open", [full]).catch(() => {});
+    } else {
+      await exec("xdg-open", [full]).catch(() => {});
     }
   }
 
@@ -407,6 +440,12 @@ export default class FileContextMenu extends View {
         notify({ title: "已複製相對路徑", body: p.relPath });
         this.close();
       }))
+      .when(!p.isDir && (p.canOpenBrowser || isBrowserFile(p.name || p.fullPath)), el =>
+        el.child(this.menuItem("m-open-browser", "在瀏覽器中開啟", t, () => {
+          this.close();
+          this.openInBrowser();
+        }))
+      )
       .child(this.menuItem("m-reveal", "在檔案總管中顯示", t, () => {
         this.close();
         this.revealInExplorer();

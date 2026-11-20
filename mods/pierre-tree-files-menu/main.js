@@ -188,29 +188,19 @@ export default class FileContextMenu extends View {
 
   openInTerminalBrowser(fullPath) {
     if (!fullPath) return;
-    const space = (spaces() ?? []).find(s => s.active);
-    const activeTab = (space?.tabs ?? []).find(t => t.active);
-    const allPanes = panes() ?? [];
-    let basePane = null;
-    if (activeTab) {
-      const tabPanes = allPanes.filter(p => p.tab === activeTab.id);
-      const f = focused();
-      basePane = (f?.pane && tabPanes.some(p => p.pane === f.pane)) ? f.pane : tabPanes[0]?.pane;
-    }
     const plat = win()?.platform;
     const targetPath = plat === "windows" ? toWinPath(fullPath) : fullPath;
+    const fileName = basenameOf(fullPath) || "Browser";
+    const folder = parentOf(fullPath) || undefined;
     const argv = plat === "windows"
       ? ["cmd.exe", "/c", "terminal-browser", targetPath]
       : ["terminal-browser", targetPath];
 
-    const splitArgs = {
-      direction: "right",
+    run("tab.new", {
+      name: `🌐 ${fileName}`,
+      folder,
       argv
-    };
-    if (basePane) {
-      splitArgs.pane = basePane;
-    }
-    run("pane.split", splitArgs);
+    });
   }
 
   async openInBrowser() {

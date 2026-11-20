@@ -186,6 +186,33 @@ export default class FileContextMenu extends View {
     }
   }
 
+  openInTerminalBrowser(fullPath) {
+    if (!fullPath) return;
+    const space = (spaces() ?? []).find(s => s.active);
+    const activeTab = (space?.tabs ?? []).find(t => t.active);
+    const allPanes = panes() ?? [];
+    let basePane = null;
+    if (activeTab) {
+      const tabPanes = allPanes.filter(p => p.tab === activeTab.id);
+      const f = focused();
+      basePane = (f?.pane && tabPanes.some(p => p.pane === f.pane)) ? f.pane : tabPanes[0]?.pane;
+    }
+    const plat = win()?.platform;
+    const targetPath = plat === "windows" ? toWinPath(fullPath) : fullPath;
+    const argv = plat === "windows"
+      ? ["cmd.exe", "/c", "terminal-browser", targetPath]
+      : ["terminal-browser", targetPath];
+
+    const splitArgs = {
+      direction: "right",
+      argv
+    };
+    if (basePane) {
+      splitArgs.pane = basePane;
+    }
+    run("pane.split", splitArgs);
+  }
+
   async openInBrowser() {
     const p = props() ?? {};
     const full = p.fullPath;
@@ -441,7 +468,11 @@ export default class FileContextMenu extends View {
         this.close();
       }))
       .when(!p.isDir && (p.canOpenBrowser || isBrowserFile(p.name || p.fullPath)), el =>
-        el.child(this.menuItem("m-open-browser", "在瀏覽器中開啟", t, () => {
+        el.child(this.menuItem("m-open-tb", "使用 terminal-browser 開啟", t, () => {
+          this.close();
+          this.openInTerminalBrowser(p.fullPath);
+        }))
+        .child(this.menuItem("m-open-browser", "在外部瀏覽器開啟", t, () => {
           this.close();
           this.openInBrowser();
         }))

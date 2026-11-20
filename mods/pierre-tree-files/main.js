@@ -489,8 +489,8 @@ export default class Files extends View {
     openOverlay({
       mod: "pierre-tree-files-menu",
       kind: "popup",
-      width: 210,
-      height: isDir ? 290 : (canOpenBrowser ? 342 : 315),
+      width: 220,
+      height: isDir ? 290 : (canOpenBrowser ? 370 : 315),
       props: {
         mode: "menu",
         fullPath,
